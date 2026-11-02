@@ -26,6 +26,12 @@
   .sw.nodata { width: 12px; height: 12px; box-sizing: border-box; border: 1.5px dashed #b8c4cc; background: transparent; }
   .lg-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
   .panel small { color: #9aa; }
+  /* NASA GIBS legends are matplotlib SVGs: transparent background + black text → need a light plate */
+  .gibs-legend { margin: 2px 0 6px 22px; background: #eef1f4; border-radius: 4px; padding: 2px 4px; max-width: 260px; }
+  .gibs-legend[hidden] { display: none; }
+  .gibs-legend img { display: block; width: 100%; height: auto; }
+  .gibs-legend .fallback { color: #1a2129; font-size: 12px; padding: 4px; }
+  .gibs-legend .fallback a { color: #0b57b0; }
   .info-btn { cursor: pointer; color: #6ab0ff; text-decoration: underline; }
   #info {
     position: absolute; z-index: 1000; left: 50%; top: 50%; transform: translate(-50%,-50%);
@@ -106,6 +112,13 @@
   const sst = gibs('https://gibs.earthdata.nasa.gov/wmts/epsg3857/all',
     'GHRSST_L4_MUR_Sea_Surface_Temperature_Anomalies_v4.1_STD', 'GoogleMapsCompatible_Level7',
     sstDate, 7, 0.7, 'SST anomaly: NASA GIBS / JPL MUR');
+  // Official pre-generated GIBS legends: https://gibs.earthdata.nasa.gov/legends/<ColorMap>_H.svg
+  // The colormap id doesn't always equal the layer id, so try candidates in order.
+  const LEGENDS = {
+    sst: ['GHRSST_L4_MUR_Sea_Surface_Temperature_Anomalies', 'GHRSST_Sea_Surface_Temperature_Anomalies'],
+    precip: ['IMERG_Precipitation_Rate']
+  };
+  const legendUrl = id => `https://gibs.earthdata.nasa.gov/legends/${id}_H.svg`;
   const precip = gibs('https://gibs.earthdata.nasa.gov/wmts/epsg3857/best',
     'IMERG_Precipitation_Rate', 'GoogleMapsCompatible_Level6',
     precipDate, 6, 0.7, 'Precipitation: NASA GIBS / IMERG');
@@ -221,20 +234,34 @@
       const div = L.DomUtil.create('div', 'panel');
       const item = (id, layer, label, color, checked) =>
         `<label><input type="checkbox" data-id="${id}" ${checked ? 'checked' : ''}><span class="sw" style="background:${color}"></span>${label}</label>`;
+      // live layers: no swatch; NASA's official legend appears under the label while the layer is on
+      const liveItem = (id, label, alt, checked) =>
+        `<label><input type="checkbox" data-id="${id}" ${checked ? 'checked' : ''}>${label}</label>` +
+        `<div class="gibs-legend" id="lg-${id}" ${checked ? '' : 'hidden'}>` +
+        `<img alt="${alt}" src="${legendUrl(LEGENDS[id][0])}" data-try="0"></div>`;
       div.innerHTML =
         `<h4>Histórico (archivos estáticos)</h4>` +
         item('nat', layerNational, 'Historial nacional de inundaciones', '#6fa8dc', false) +
         item('costa', layerCosta, 'Zona Niño Costero', '#3f98d4', true) +
         item('crit', layerCritical, 'Puntos críticos CENEPRED', '#5fd3a0', true) +
         `<h4>Condiciones en vivo (NASA)</h4>` +
-        item('sst', sst, `Anomalía TSM <small>(${sstDate})</small>`, '#e34a33', true) +
-        item('precip', precip, `Precipitación IMERG <small>(${precipDate})</small>`, '#31a354', true) +
+        liveItem('sst', `Anomalía TSM <small>(${sstDate})</small>`, 'Leyenda NASA GIBS: anomalía de temperatura superficial del mar (°C)', true) +
+        liveItem('precip', `Precipitación IMERG <small>(${precipDate})</small>`, 'Leyenda NASA GIBS: tasa de precipitación IMERG (mm/h)', true) +
         `<div id="warn" style="margin-top:6px"></div>` +
         `<div style="margin-top:8px"><span class="info-btn" id="infoBtn">Metodología y advertencias</span></div>`;
       const layers = { nat: layerNational, costa: layerCosta, crit: layerCritical, sst, precip };
       div.querySelectorAll('input').forEach(cb => cb.addEventListener('change', () => {
         const l = layers[cb.dataset.id];
         cb.checked ? map.addLayer(l) : map.removeLayer(l);
+        const lg = div.querySelector('#lg-' + cb.dataset.id);
+        if (lg) lg.hidden = !cb.checked;
+      }));
+      // legend fallback chain → if every candidate fails, link out instead of showing a broken image
+      div.querySelectorAll('.gibs-legend img').forEach(img => img.addEventListener('error', () => {
+        const id = img.parentElement.id.slice(3), next = +img.dataset.try + 1;
+        if (next < LEGENDS[id].length) { img.dataset.try = next; img.src = legendUrl(LEGENDS[id][next]); return; }
+        img.parentElement.innerHTML = `<div class="fallback">Leyenda no disponible. ` +
+          `<a href="https://worldview.earthdata.nasa.gov/" target="_blank" rel="noopener noreferrer">Ver en NASA Worldview</a></div>`;
       }));
       div.querySelector('#infoBtn').addEventListener('click', () => document.getElementById('info').classList.add('open'));
       L.DomEvent.disableClickPropagation(div);
