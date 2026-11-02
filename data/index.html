@@ -33,7 +33,29 @@
   .gibs-legend img { display: block; width: 100%; height: auto; }
   .gibs-legend .fallback { color: #1a2129; font-size: 12px; padding: 4px; }
   .gibs-legend .fallback a { color: #0b57b0; }
-  .info-btn { cursor: pointer; color: #6ab0ff; text-decoration: underline; }
+  .info-btn { cursor: pointer; color: #6ab0ff; text-decoration: underline; background: none; border: 0; padding: 0; font: inherit; }
+  :focus-visible { outline: 2px solid #8cc8ff; outline-offset: 2px; }
+  /* collapsible controls (open on desktop, closed on phones) */
+  .panel summary { cursor: pointer; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #c9d4de; list-style: none; display: flex; align-items: center; gap: 6px; }
+  .panel summary::-webkit-details-marker { display: none; }
+  .panel summary::before { content: '▸'; font-size: 12px; color: #8fa3b8; }
+  .panel details[open] > summary::before { content: '▾'; }
+  .panel details[open] > summary { margin-bottom: 6px; }
+  .panel .scroll { max-height: calc(100vh - 160px); overflow: auto; }
+  .status { color: #e8e8e8; display: block; border-left: 3px solid #a9b4bf; padding-left: 6px; }
+  /* phones: ≥44px tap targets, narrower panels */
+  @media (max-width: 600px) {
+    .panel { font-size: 14px; max-width: calc(100vw - 80px); }
+    .panel summary { min-height: 44px; }
+    .panel label { min-height: 44px; margin: 0; }
+    .panel label input { width: 20px; height: 20px; }
+    .info-btn { min-height: 44px; }
+    .gibs-legend { margin-left: 26px; }
+    .leaflet-touch .leaflet-bar a { width: 44px; height: 44px; line-height: 44px; }
+    #info button { min-height: 44px; min-width: 88px; }
+    #strip { font-size: 12px; }
+    .leaflet-control-attribution { font-size: 9px; }
+  }
   #info {
     position: absolute; z-index: 1000; left: 50%; top: 50%; transform: translate(-50%,-50%);
     width: min(560px, 90vw); max-height: 80vh; overflow: auto; display: none;
@@ -42,7 +64,6 @@
   #info p, #info li { margin: 6px 0; }
   #info button { float: right; }
   .leaflet-popup-content a { color: #1b6ac9; }
-  .status { color: #f0b429; }
 </style>
 </head>
 <body>
@@ -54,8 +75,8 @@
 </header>
 <div id="map"></div>
 
-<div id="info" class="panel">
-  <button onclick="document.getElementById('info').classList.remove('open')">Cerrar</button>
+<div id="info" class="panel" role="dialog" aria-label="Metodología y advertencias">
+  <button type="button" onclick="document.getElementById('info').classList.remove('open')">Cerrar</button>
   <h4>Metodología y advertencias</h4>
   <ul>
     <li><b>Historial (2003–2021):</b> registros INDECI/SINPAD filtrados a fenómenos de lluvia/inundación y agregados por distrito. Es una línea base histórica, <u>no</u> un reporte en vivo del evento 2026-2027; la cobertura termina ~2021-12.</li>
@@ -249,16 +270,17 @@
         `<label><input type="checkbox" data-id="${id}" ${checked ? 'checked' : ''}>${label}</label>` +
         `<div class="gibs-legend" id="lg-${id}" ${checked ? '' : 'hidden'}>` +
         `<img alt="${alt}" src="${legendUrl(LEGENDS[id][0])}" data-try="0"></div>`;
-      div.innerHTML =
+      div.innerHTML = `<details class="ctl"><summary>Capas</summary><div class="scroll">` +
         `<h4>Histórico (archivos estáticos)</h4>` +
-        item('nat', layerNational, 'Historial nacional de inundaciones', '#6fa8dc', false) +
+        item('nat', layerNational, 'Historial nacional de inundaciones', '#5b7f95', false) +
         item('costa', layerCosta, 'Zona Niño Costero', '#3f98d4', true) +
         item('crit', layerCritical, 'Puntos críticos CENEPRED', '#5fd3a0', true) +
         `<h4>Condiciones en vivo (NASA)</h4>` +
         liveItem('sst', `Anomalía TSM <small>(${sstDate})</small>`, 'Leyenda NASA GIBS: anomalía de temperatura superficial del mar (°C)', true) +
         liveItem('precip', `Precipitación IMERG <small>(${precipDate})</small>`, 'Leyenda NASA GIBS: tasa de precipitación IMERG (mm/h)', true) +
         `<div id="warn" style="margin-top:6px"></div>` +
-        `<div style="margin-top:8px"><span class="info-btn" id="infoBtn">Metodología y advertencias</span></div>`;
+        `<div style="margin-top:8px"><button type="button" class="info-btn" id="infoBtn">Metodología y advertencias</button></div>` +
+        `</div></details>`;
       const layers = { nat: layerNational, costa: layerCosta, crit: layerCritical, sst, precip };
       div.querySelectorAll('input').forEach(cb => cb.addEventListener('change', () => {
         const l = layers[cb.dataset.id];
@@ -290,15 +312,21 @@
       const rows = RAMP.map((col, i) => [col, i === n - 1
         ? `≥ ${fmt(binEdge(i))}‰ <small>(escala con tope en 1,000‰)</small>`
         : `${fmt(binEdge(i))} – ${fmt(binEdge(i + 1))}‰`]);
-      div.innerHTML = `<h4>Eventos / 1000 hab. (acumulado, escala log)</h4>` +
+      div.innerHTML = `<details class="ctl"><summary>Eventos / 1000 hab. (acumulado, escala log)</summary>` +
         rows.map(([col, t]) => `<div class="lg-row"><span class="sw rate" style="background:${col}"></span> ${t}</div>`).join('') +
         `<div class="lg-row"><span class="sw small"></span> población &lt; ${fmt(SMALL_POP)} (tasa poco estable, atenuada)</div>` +
         `<div class="lg-row"><span class="sw nodata"></span> sin datos / sin registros</div>` +
-        `<small>Círculos en la zona Niño Costero (pasa el cursor).<br>Distritos sin eventos registrados no aparecen: <b>no</b> implica ausencia de riesgo.</small>`;
+        `<small>Círculos en la zona Niño Costero (pasa el cursor o toca).<br>Distritos sin eventos registrados no aparecen: <b>no</b> implica ausencia de riesgo.</small>` +
+        `</details>`;
+      L.DomEvent.disableClickPropagation(div);
+      L.DomEvent.disableScrollPropagation(div);
       return div;
     }
   });
   map.addControl(new Legend());
+  // controls start open on desktop, collapsed on phones so the map stays visible
+  const wide = !matchMedia('(max-width: 600px)').matches;
+  document.querySelectorAll('details.ctl').forEach(d => { d.open = wide; });
 })();
 </script>
 </body>
