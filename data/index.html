@@ -7,7 +7,13 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   html, body { height: 100%; margin: 0; background: #111; font-family: system-ui, Segoe UI, Arial, sans-serif; }
-  #map { height: 100%; background: #111; }
+  body { display: flex; flex-direction: column; }
+  #map { flex: 1; min-height: 0; background: #111; }
+  /* Status strip: neutral slate on purpose — no alert colors, this page is not an official warning */
+  #strip { background: #1a2129; color: #e8e8e8; border-bottom: 1px solid #2c3742; padding: 6px 12px; font-size: 13px; line-height: 1.4; }
+  #strip a { color: #8cc8ff; }
+  #strip .muted { color: #a9b4bf; font-size: 12px; }
+  #strip .stale { color: #e8e8e8; border: 1px solid #a9b4bf; border-radius: 3px; padding: 0 4px; font-size: 11px; }
   .panel {
     background: rgba(20,22,28,.92); color: #e8e8e8; border-radius: 8px; padding: 10px 12px;
     box-shadow: 0 2px 10px rgba(0,0,0,.5); font-size: 13px; line-height: 1.35;
@@ -15,9 +21,41 @@
   .panel h4 { margin: 8px 0 4px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #8fa3b8; }
   .panel h4:first-child { margin-top: 0; }
   .panel label { display: flex; align-items: center; gap: 6px; margin: 3px 0; cursor: pointer; }
-  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .sw.rate { width: 12px; height: 12px; box-sizing: border-box; border: 1px solid rgba(230,240,245,.55); }
+  .sw.nodata { width: 12px; height: 12px; box-sizing: border-box; border: 1.5px dashed #b8c4cc; background: transparent; }
+  .sw.small { width: 8px; height: 8px; margin: 0 2px; background: rgba(124,196,230,.35); border: .5px solid rgba(230,240,245,.3); }
+  .lg-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
   .panel small { color: #9aa; }
-  .info-btn { cursor: pointer; color: #6ab0ff; text-decoration: underline; }
+  /* NASA GIBS legends are matplotlib SVGs: transparent background + black text → need a light plate */
+  .gibs-legend { margin: 2px 0 6px 22px; background: #eef1f4; border-radius: 4px; padding: 2px 4px; max-width: 260px; }
+  .gibs-legend[hidden] { display: none; }
+  .gibs-legend img { display: block; width: 100%; height: auto; }
+  .gibs-legend .fallback { color: #1a2129; font-size: 12px; padding: 4px; }
+  .gibs-legend .fallback a { color: #0b57b0; }
+  .info-btn { cursor: pointer; color: #6ab0ff; text-decoration: underline; background: none; border: 0; padding: 0; font: inherit; }
+  :focus-visible { outline: 2px solid #8cc8ff; outline-offset: 2px; }
+  /* collapsible controls (open on desktop, closed on phones) */
+  .panel summary { cursor: pointer; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #c9d4de; list-style: none; display: flex; align-items: center; gap: 6px; }
+  .panel summary::-webkit-details-marker { display: none; }
+  .panel summary::before { content: '▸'; font-size: 12px; color: #8fa3b8; }
+  .panel details[open] > summary::before { content: '▾'; }
+  .panel details[open] > summary { margin-bottom: 6px; }
+  .panel .scroll { max-height: calc(100vh - 160px); overflow: auto; }
+  .status { color: #e8e8e8; display: block; border-left: 3px solid #a9b4bf; padding-left: 6px; }
+  /* phones: ≥44px tap targets, narrower panels */
+  @media (max-width: 600px) {
+    .panel { font-size: 14px; max-width: calc(100vw - 80px); }
+    .panel summary { min-height: 44px; }
+    .panel label { min-height: 44px; margin: 0; }
+    .panel label input { width: 20px; height: 20px; }
+    .info-btn { min-height: 44px; }
+    .gibs-legend { margin-left: 26px; }
+    .leaflet-touch .leaflet-bar a { width: 44px; height: 44px; line-height: 44px; }
+    #info button { min-height: 44px; min-width: 88px; }
+    #strip { font-size: 12px; }
+    .leaflet-control-attribution { font-size: 9px; }
+  }
   #info {
     position: absolute; z-index: 1000; left: 50%; top: 50%; transform: translate(-50%,-50%);
     width: min(560px, 90vw); max-height: 80vh; overflow: auto; display: none;
@@ -26,19 +64,24 @@
   #info p, #info li { margin: 6px 0; }
   #info button { float: right; }
   .leaflet-popup-content a { color: #1b6ac9; }
-  .status { color: #f0b429; }
 </style>
 </head>
 <body>
+<header id="strip" role="region" aria-label="Estado oficial ENFEN">
+  <div id="enfen">Estado ENFEN: consulta el <a href="https://enfen.imarpe.gob.pe/comunicados/" target="_blank" rel="noopener noreferrer">último comunicado oficial</a>.</div>
+  <div class="muted">Este mapa no es un aviso oficial. Avisos oficiales:
+    <a href="https://www.senamhi.gob.pe/" target="_blank" rel="noopener noreferrer">SENAMHI</a> ·
+    <a href="https://www.gob.pe/indeci" target="_blank" rel="noopener noreferrer">INDECI</a>.</div>
+</header>
 <div id="map"></div>
 
-<div id="info" class="panel">
-  <button onclick="document.getElementById('info').classList.remove('open')">Cerrar</button>
+<div id="info" class="panel" role="dialog" aria-label="Metodología y advertencias">
+  <button type="button" onclick="document.getElementById('info').classList.remove('open')">Cerrar</button>
   <h4>Metodología y advertencias</h4>
   <ul>
     <li><b>Historial (2003–2021):</b> registros INDECI/SINPAD filtrados a fenómenos de lluvia/inundación y agregados por distrito. Es una línea base histórica, <u>no</u> un reporte en vivo del evento 2026-2027; la cobertura termina ~2021-12.</li>
     <li><b>Mapas de calor:</b> el peso es el número de eventos por distrito en escala logarítmica, para que unos pocos distritos extremos no dominen la escala.</li>
-    <li><b>Tasas por 1,000 hab. (en el tooltip de la capa Niño Costero):</b> son <b>sumas acumuladas de ~19 años de eventos distintos</b> dividida entre la población 2020 — no un porcentaje en un momento dado. Distritos pequeños pueden superar 1,000‰. Los colores usan escala log con tope en 1,000‰.</li>
+    <li><b>Tasas por 1,000 hab. (en el tooltip de la capa Niño Costero):</b> son <b>sumas acumuladas de ~19 años de eventos distintos</b> dividida entre la población 2020 — no un porcentaje en un momento dado. Distritos pequeños pueden superar 1,000‰. Los colores usan escala log; cada capa tiene su propio tope (Costa Norte: su máximo real, ~31‰), así que los colores no son comparables entre capas.</li>
     <li><b>Población:</b> proyección INEI a 2020 (Mapa de Pobreza 2018), no 2026. Distritos urbanos de rápido crecimiento quedan subestimados. Sin población → tasa nula.</li>
     <li><b>Zona Niño Costero:</b> filtro geográfico (Tumbes, Piura, Lambayeque, La Libertad), no un filtro por "años Niño".</li>
     <li><b>Puntos críticos:</b> sitios validados por CENEPRED/SIGRID; el popup enlaza al PDF fuente.</li>
@@ -53,6 +96,18 @@
   const esc = s => String(s ?? '—').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmt = n => (n == null || isNaN(n)) ? '—' : Number(n).toLocaleString('es-PE');
 
+  // ---- ENFEN status strip: dated info from enfen_status.json, never presented as live ----
+  fetch('enfen_status.json').then(r => r.ok ? r.json() : Promise.reject(r.status)).then(st => {
+    if (!/^https:\/\//.test(st.url) || !/^\d{4}-\d{2}-\d{2}$/.test(st.fecha)) return;
+    const d = new Date(st.fecha + 'T12:00:00Z');
+    const ageDays = Math.floor((Date.now() - d) / 864e5);
+    const fecha = d.toLocaleDateString('es-PE', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+    document.getElementById('enfen').innerHTML =
+      `Estado ENFEN al ${esc(fecha)}: <b>${esc(st.estado)}</b> · ` +
+      `<a href="${encodeURI(st.url)}" target="_blank" rel="noopener noreferrer">${esc(st.comunicado)}</a>` +
+      (ageDays > 21 ? ` <span class="stale">dato de hace ${ageDays} días — verifica el comunicado vigente</span>` : '');
+  }).catch(e => console.error('enfen_status.json', e));
+
   const map = L.map('map', { center: [-9.2, -75.0], zoom: 6, preferCanvas: true });
   // Esri dark gray canvas (free, no API key). CARTO's dark_all now returns "API KEY REQUIRED" watermarks.
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
@@ -61,6 +116,8 @@
   map.createPane('labels');
   map.getPane('labels').style.zIndex = 650;        // above overlays, below popups
   map.getPane('labels').style.pointerEvents = 'none';
+  map.createPane('rates');                         // rate circles above the dense CENEPRED points
+  map.getPane('rates').style.zIndex = 450;
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
     pane: 'labels', maxNativeZoom: 16, maxZoom: 19
   }).addTo(map);
@@ -77,6 +134,11 @@
   const sst = gibs('https://gibs.earthdata.nasa.gov/wmts/epsg3857/all',
     'GHRSST_L4_MUR_Sea_Surface_Temperature_Anomalies_v4.1_STD', 'GoogleMapsCompatible_Level7',
     sstDate, 7, 0.7, 'SST anomaly: NASA GIBS / JPL MUR');
+  // Official pre-generated GIBS legends. GIBS names legend files by colormap family, not layer id.
+  const LEGENDS = {
+    sst: 'https://gibs.earthdata.nasa.gov/legends/GHRSST_Sea_Surface_Temperature_Anomalies_H.svg',
+    precip: 'https://gibs.earthdata.nasa.gov/legends/GPM_Precipitation_Rate_H.svg'
+  };
   const precip = gibs('https://gibs.earthdata.nasa.gov/wmts/epsg3857/best',
     'IMERG_Precipitation_Rate', 'GoogleMapsCompatible_Level6',
     precipDate, 6, 0.7, 'Precipitation: NASA GIBS / IMERG');
@@ -104,12 +166,33 @@
     const max = Math.log1p(Math.max(1, ...feats.map(f => f.properties.event_count)));
     return feats.map(f => { const c = coords(f); return [c[0], c[1], Math.max(0.05, Math.log1p(f.properties.event_count) / max)]; });
   }
-  // rate color: log scale capped at 1000 per mil
-  function rateColor(r) {
-    if (r == null) return '#666';
-    const t = Math.min(1, Math.log10(1 + Math.max(0, r)) / 3); // 0..1000 → 0..1
-    const stops = ['#2c7bb6', '#abd9e9', '#ffffbf', '#fdae61', '#d7191c'];
-    return stops[Math.min(stops.length - 1, Math.floor(t * stops.length))];
+  // Rate color: log scale capped at 1000 per mil, 5 equal bins in log space.
+  // Cool sequential ramp (dark navy → pale cyan), L* ≈ 33→94 in even steps.
+  // Deliberately avoids yellow/orange/red/purple/black: in Peru those are
+  // SENAMHI's official alert colors, and this layer is historical context.
+  const RAMP = ['#1f4b8f', '#2a6fb8', '#3f98d4', '#7cc4e6', '#d6f2fb'];
+  // Each layer gets its OWN top: 5 equal bins in log1p space between 0 and `top`.
+  // National keeps the fixed 1000‰ cap; Costa Norte uses its real max (set once the data loads),
+  // otherwise it would only reach 3 of the 5 bins. Colors are therefore NOT comparable across layers.
+  const SCALES = { nat: { top: 1000, capped: true }, costa: { top: 1000, capped: false } };
+  const rateBin = (r, sc) => Math.min(RAMP.length - 1,
+    Math.floor(Math.min(1, Math.log1p(Math.max(0, r)) / Math.log1p(sc.top)) * RAMP.length));
+  // bin lower edges in ‰ (inverse of the log mapping) for the legend
+  const binEdge = (i, sc) => Math.expm1(Math.log1p(sc.top) * i / RAMP.length);
+  const fmtEdge = v => v < 10 ? fmt(Math.round(v * 10) / 10) : fmt(Math.round(v));
+  const rateColor = (r, sc) => r == null ? null : RAMP[rateBin(r, sc)];
+  // All rate markers get a pale stroke so even the darkest bin reads on the dark basemap.
+  // No data: hollow dashed ring — never a ramp color, so it can't read as "low/safe".
+  // Small populations make cumulative rates unstable (1 event in 542 people ≈ 1.8‰), so below
+  // SMALL_POP (~p5 of the Niño Costero districts) circles are smaller and translucent: same hue, quieter.
+  // Dashes stay reserved for "no data".
+  const SMALL_POP = 2000;
+  const isSmall = pop => pop != null && pop > 0 && pop < SMALL_POP;
+  function rateStyle(r, pop, sc) {
+    if (r == null) return { radius: 5, weight: 1.5, color: '#b8c4cc', dashArray: '2 2', fill: false, opacity: .9 };
+    return isSmall(pop)
+      ? { radius: 3.5, weight: .5, color: '#e6f0f5', opacity: .3, fillColor: rateColor(r, sc), fillOpacity: .35 }
+      : { radius: 5, weight: 1, color: '#e6f0f5', opacity: .55, fillColor: rateColor(r, sc), fillOpacity: .9 };
   }
 
   const layerNational = L.layerGroup();
@@ -121,21 +204,26 @@
     loadGeo('emergencias_distrito_costa_nino.geojson'),
     loadGeo('puntos_criticos_inundacion.geojson')
   ]).then(([nat, costa, crit]) => {
-    // Layer 1: national heatmap (blue→red-ish "cool" palette)
+    // Layer 1: national heatmap (slate ramp, distinct from the Niño Costero blues)
     L.heatLayer(heatPoints(nat), {
       radius: 18, blur: 22, minOpacity: 0.25, max: 1,
-      gradient: { 0.2: '#3b4cc0', 0.45: '#6fa8dc', 0.7: '#f4e04d', 1.0: '#ffffff' }
+      gradient: { 0.2: '#2f4858', 0.5: '#5b7f95', 0.8: '#9fbccc', 1.0: '#e3edf2' }  // desaturated slate
     }).addTo(layerNational);
 
-    // Layer 2: Niño Costero heatmap (warm palette) + hover tooltips with capped-rate color
+    // Layer 2: Niño Costero heatmap (same cool ramp as the rate legend) + rate circles with tooltips
     L.heatLayer(heatPoints(costa), {
       radius: 28, blur: 24, minOpacity: 0.3, max: 1,
-      gradient: { 0.25: '#7a0177', 0.5: '#f03b20', 0.75: '#fd8d3c', 1.0: '#ffeda0' }
+      gradient: { 0.25: '#1f4b8f', 0.5: '#2a6fb8', 0.75: '#7cc4e6', 1.0: '#e8f8fd' }
     }).addTo(layerCosta);
-    costa.features.forEach(f => {
+    const costaMax = Math.max(0, ...costa.features.map(f => f.properties.event_rate_per_1000 ?? 0));
+    if (costaMax > 0) SCALES.costa.top = costaMax;
+    renderRateLegend();
+    // draw small-population districts first so full-strength circles sit on top
+    const bySize = f => isSmall(f.properties.poblacion_2020) ? 0 : 1;
+    costa.features.slice().sort((a, b) => bySize(a) - bySize(b)).forEach(f => {
       const c = coords(f); if (!c) return;
       const p = f.properties;
-      L.circleMarker(c, { radius: 5, weight: 1, color: '#000', fillColor: rateColor(p.event_rate_per_1000), fillOpacity: .8, opacity: .6 })
+      L.circleMarker(c, { pane: 'rates', ...rateStyle(p.event_rate_per_1000, p.poblacion_2020, SCALES.costa) })
         .bindTooltip(
           `<b>${esc(p.distrito)}</b> (${esc(p.provincia)}, ${esc(p.departamento)})<br>` +
           `Eventos 2003–2021: ${fmt(p.event_count)}<br>` +
@@ -143,6 +231,7 @@
           `Población 2020: ${fmt(p.poblacion_2020)}<br>` +
           `Eventos/1000 hab. (acumulado): ${p.event_rate_per_1000 == null ? '—' : fmt(p.event_rate_per_1000) + '‰'}<br>` +
           `Afectados/1000 hab. (acumulado): ${p.afectados_rate_per_1000 == null ? '—' : fmt(p.afectados_rate_per_1000) + '‰'}<br>` +
+          (isSmall(p.poblacion_2020) ? `<small><b>Población &lt; ${fmt(SMALL_POP)}:</b> tasa poco estable, se muestra atenuada.</small><br>` : '') +
           `<small>Suma de ~19 años, no un % puntual; puede superar 1,000‰.</small>`,
           { sticky: true })
         .addTo(layerCosta);
@@ -157,7 +246,7 @@
       if (typeof p.url === 'string' && /^https?:\/\//i.test(p.url)) {
         link = `<br><a href="${encodeURI(p.url)}" target="_blank" rel="noopener noreferrer">Ver PDF fuente (CENEPRED)</a>`;
       }
-      L.circleMarker(c, { renderer: canvas, radius: 4, weight: 1, color: '#fff', fillColor: '#00c2ff', fillOpacity: .85 })
+      L.circleMarker(c, { renderer: canvas, radius: 3.5, weight: 1, color: '#0d1f17', fillColor: '#5fd3a0', fillOpacity: .85 })
         .bindPopup(
           `<b>${esc(p.paraje)}</b><br>` +
           `Distrito: ${esc(p.nom_dist)} (${esc(p.nom_prov)}, ${esc(p.nom_dpto)})<br>` +
@@ -183,20 +272,33 @@
       const div = L.DomUtil.create('div', 'panel');
       const item = (id, layer, label, color, checked) =>
         `<label><input type="checkbox" data-id="${id}" ${checked ? 'checked' : ''}><span class="sw" style="background:${color}"></span>${label}</label>`;
-      div.innerHTML =
+      // live layers: no swatch; NASA's official legend appears under the label while the layer is on
+      const liveItem = (id, label, alt, checked) =>
+        `<label><input type="checkbox" data-id="${id}" ${checked ? 'checked' : ''}>${label}</label>` +
+        `<div class="gibs-legend" id="lg-${id}" ${checked ? '' : 'hidden'}>` +
+        `<img alt="${alt}" src="${LEGENDS[id]}"></div>`;
+      div.innerHTML = `<details class="ctl"><summary>Capas</summary><div class="scroll">` +
         `<h4>Histórico (archivos estáticos)</h4>` +
-        item('nat', layerNational, 'Historial nacional de inundaciones', '#6fa8dc', false) +
-        item('costa', layerCosta, 'Zona Niño Costero', '#f03b20', true) +
-        item('crit', layerCritical, 'Puntos críticos CENEPRED', '#00c2ff', true) +
+        item('nat', layerNational, 'Historial nacional de inundaciones', '#5b7f95', false) +
+        item('costa', layerCosta, 'Zona Niño Costero', '#3f98d4', true) +
+        item('crit', layerCritical, 'Puntos críticos CENEPRED', '#5fd3a0', true) +
         `<h4>Condiciones en vivo (NASA)</h4>` +
-        item('sst', sst, `Anomalía TSM <small>(${sstDate})</small>`, '#e34a33', true) +
-        item('precip', precip, `Precipitación IMERG <small>(${precipDate})</small>`, '#31a354', true) +
+        liveItem('sst', `Anomalía TSM <small>(${sstDate})</small>`, 'Leyenda NASA GIBS: anomalía de temperatura superficial del mar (°C)', true) +
+        liveItem('precip', `Precipitación IMERG <small>(${precipDate})</small>`, 'Leyenda NASA GIBS: tasa de precipitación IMERG (mm/h)', true) +
         `<div id="warn" style="margin-top:6px"></div>` +
-        `<div style="margin-top:8px"><span class="info-btn" id="infoBtn">Metodología y advertencias</span></div>`;
+        `<div style="margin-top:8px"><button type="button" class="info-btn" id="infoBtn">Metodología y advertencias</button></div>` +
+        `</div></details>`;
       const layers = { nat: layerNational, costa: layerCosta, crit: layerCritical, sst, precip };
       div.querySelectorAll('input').forEach(cb => cb.addEventListener('change', () => {
         const l = layers[cb.dataset.id];
         cb.checked ? map.addLayer(l) : map.removeLayer(l);
+        const lg = div.querySelector('#lg-' + cb.dataset.id);
+        if (lg) lg.hidden = !cb.checked;
+      }));
+      // if NASA is unreachable, link out instead of showing a broken image
+      div.querySelectorAll('.gibs-legend img').forEach(img => img.addEventListener('error', () => {
+        img.parentElement.innerHTML = `<div class="fallback">Leyenda no disponible. ` +
+          `<a href="https://worldview.earthdata.nasa.gov/" target="_blank" rel="noopener noreferrer">Ver en NASA Worldview</a></div>`;
       }));
       div.querySelector('#infoBtn').addEventListener('click', () => document.getElementById('info').classList.add('open'));
       L.DomEvent.disableClickPropagation(div);
@@ -207,19 +309,42 @@
   map.addControl(new Control());
 
   // ---- legend for capped rate colors ----
+  function renderRateLegend() {
+    const sc = SCALES.costa, n = RAMP.length, el = document.getElementById('lg-costa-rows');
+    if (!el) return;
+    document.getElementById('lg-costa-title').innerHTML = sc.capped
+      ? `Costa Norte: escala hasta ≥${fmt(sc.top)}‰ (tope)`
+      : `Costa Norte: escala hasta ${fmt(Math.round(sc.top))}‰, su máximo real`;
+    el.innerHTML = RAMP.map((col, i) => {
+      const lo = fmtEdge(binEdge(i, sc)), hi = fmtEdge(binEdge(i + 1, sc));
+      const t = i === n - 1 ? (sc.capped ? `≥ ${lo}‰` : `${lo} – ${hi}‰ <small>(máximo)</small>`) : `${lo} – ${hi}‰`;
+      return `<div class="lg-row"><span class="sw rate" style="background:${col}"></span> ${t}</div>`;
+    }).join('') + `<small>Acumulado 2003–2021, escala log.</small>`;
+  }
   const Legend = L.Control.extend({
     options: { position: 'bottomleft' },
     onAdd() {
       const div = L.DomUtil.create('div', 'panel');
-      const rows = [[0, '0‰'], [10, '10‰'], [100, '100‰'], [1000, '≥1,000‰ (tope)']];
-      div.innerHTML = `<h4>Eventos / 1000 hab. (acumulado, escala log)</h4>` +
-        rows.map(([v, t]) => `<div><span class="sw" style="background:${rateColor(v)}"></span> ${t}</div>`).join('') +
-        `<div><span class="sw" style="background:#666"></span> sin población</div>` +
-        `<small>Círculos en la zona Niño Costero (pasa el cursor)</small>`;
+      div.innerHTML = `<details class="ctl"><summary>Leyenda</summary>` +
+        `<div id="lg-nat" hidden><h4>Nacional: n° de eventos (mapa de calor, log)</h4>` +
+        `<small>Pondera eventos, no tasas: no comparable en magnitud con Costa Norte.</small></div>` +
+        `<h4 id="lg-costa-title">Costa Norte: eventos / 1000 hab.</h4>` +
+        `<div id="lg-costa-rows"></div>` +
+        `<div class="lg-row"><span class="sw small"></span> población &lt; ${fmt(SMALL_POP)} (tasa poco estable, atenuada)</div>` +
+        `<div class="lg-row"><span class="sw nodata"></span> sin datos / sin registros</div>` +
+        `<small>Círculos en la zona Niño Costero (pasa el cursor o toca).<br>Distritos sin eventos registrados no aparecen: <b>no</b> implica ausencia de riesgo.</small>` +
+        `</details>`;
+      L.DomEvent.disableClickPropagation(div);
+      L.DomEvent.disableScrollPropagation(div);
       return div;
     }
   });
   map.addControl(new Legend());
+  renderRateLegend();
+  map.on('layeradd layerremove', () => { document.getElementById('lg-nat').hidden = !map.hasLayer(layerNational); });
+  // controls start open on desktop, collapsed on phones so the map stays visible
+  const wide = !matchMedia('(max-width: 600px)').matches;
+  document.querySelectorAll('details.ctl').forEach(d => { d.open = wide; });
 })();
 </script>
 </body>

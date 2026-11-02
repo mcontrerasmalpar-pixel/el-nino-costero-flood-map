@@ -28,6 +28,14 @@ Luego abrir http://localhost:8000/index.html
 
 El mapa base es Esri World Dark Gray (gratuito, sin clave). No se requiere ninguna API key.
 
+## Estado ENFEN (franja superior)
+
+`data/enfen_status.json` guarda el estado y el ultimo comunicado oficial ENFEN (numero, fecha, enlace). Es informacion fechada: ENFEN publica cada ~2 semanas, asi que hay que actualizar ese archivo con cada comunicado. Si la fecha tiene mas de 21 dias, la pagina lo marca como posiblemente desactualizado. El mapa no es un aviso oficial (ver SENAMHI / INDECI).
+
+## Colores
+
+La escala de tasas y los mapas de calor usan solo azules/cian (secuencial frio). No se usan amarillo, naranja, rojo, morado ni negro porque en Peru son los colores oficiales de alerta (SENAMHI). Distritos con poblacion < 2,000 se muestran atenuados; "sin datos" es un anillo punteado sin relleno.
+
 ## Archivos de datos
 
 Los archivos pequenos necesarios para el mapa estan incluidos en `data/`:
@@ -65,6 +73,6 @@ Ejecutar en este orden desde la raiz del proyecto (requiere Python 3, `requests`
 ## Limitaciones y metodologia
 
 - El historial cubre 2003 a 2021-12. Es una linea base historica, no un reporte en vivo del evento 2026-2027.
-- Las tasas por 1,000 habitantes son sumas acumuladas de unos 19 anos de eventos distintos, divididas entre la poblacion; no son un porcentaje en un momento dado. Distritos pequenos pueden superar 1,000 por mil. La escala de color es logaritmica con tope en 1,000 por mil, y los mapas de calor usan peso logaritmico para que los valores extremos no dominen.
+- Las tasas por 1,000 habitantes son sumas acumuladas de unos 19 anos de eventos distintos, divididas entre la poblacion; no son un porcentaje en un momento dado. Distritos pequenos pueden superar 1,000 por mil. La escala de color es logaritmica y cada capa tiene su propio tope (Costa Norte: su maximo real, ~31 por mil; nacional: 1,000 por mil), por lo que los colores no son comparables entre capas, y los mapas de calor usan peso logaritmico para que los valores extremos no dominen.
 - La poblacion es una proyeccion INEI a 2020, no a 2026. Los distritos urbanos de rapido crecimiento quedan subestimados. Ocho distritos de la capa nacional no tienen poblacion asociada y sus tasas son nulas.
 - La zona El Nino Costero es un filtro geografico (cuatro departamentos del norte), no un filtro por anos con El Nino.
