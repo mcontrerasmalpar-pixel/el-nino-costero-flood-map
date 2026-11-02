@@ -81,7 +81,7 @@
   <ul>
     <li><b>Historial (2003–2021):</b> registros INDECI/SINPAD filtrados a fenómenos de lluvia/inundación y agregados por distrito. Es una línea base histórica, <u>no</u> un reporte en vivo del evento 2026-2027; la cobertura termina ~2021-12.</li>
     <li><b>Mapas de calor:</b> el peso es el número de eventos por distrito en escala logarítmica, para que unos pocos distritos extremos no dominen la escala.</li>
-    <li><b>Tasas por 1,000 hab. (en el tooltip de la capa Niño Costero):</b> son <b>sumas acumuladas de ~19 años de eventos distintos</b> dividida entre la población 2020 — no un porcentaje en un momento dado. Distritos pequeños pueden superar 1,000‰. Los colores usan escala log con tope en 1,000‰.</li>
+    <li><b>Tasas por 1,000 hab. (en el tooltip de la capa Niño Costero):</b> son <b>sumas acumuladas de ~19 años de eventos distintos</b> dividida entre la población 2020 — no un porcentaje en un momento dado. Distritos pequeños pueden superar 1,000‰. Los colores usan escala log; cada capa tiene su propio tope (Costa Norte: su máximo real, ~31‰), así que los colores no son comparables entre capas.</li>
     <li><b>Población:</b> proyección INEI a 2020 (Mapa de Pobreza 2018), no 2026. Distritos urbanos de rápido crecimiento quedan subestimados. Sin población → tasa nula.</li>
     <li><b>Zona Niño Costero:</b> filtro geográfico (Tumbes, Piura, Lambayeque, La Libertad), no un filtro por "años Niño".</li>
     <li><b>Puntos críticos:</b> sitios validados por CENEPRED/SIGRID; el popup enlaza al PDF fuente.</li>
@@ -134,13 +134,11 @@
   const sst = gibs('https://gibs.earthdata.nasa.gov/wmts/epsg3857/all',
     'GHRSST_L4_MUR_Sea_Surface_Temperature_Anomalies_v4.1_STD', 'GoogleMapsCompatible_Level7',
     sstDate, 7, 0.7, 'SST anomaly: NASA GIBS / JPL MUR');
-  // Official pre-generated GIBS legends: https://gibs.earthdata.nasa.gov/legends/<ColorMap>_H.svg
-  // The colormap id doesn't always equal the layer id, so try candidates in order.
+  // Official pre-generated GIBS legends. GIBS names legend files by colormap family, not layer id.
   const LEGENDS = {
-    sst: ['GHRSST_L4_MUR_Sea_Surface_Temperature_Anomalies', 'GHRSST_Sea_Surface_Temperature_Anomalies'],
-    precip: ['IMERG_Precipitation_Rate']
+    sst: 'https://gibs.earthdata.nasa.gov/legends/GHRSST_Sea_Surface_Temperature_Anomalies_H.svg',
+    precip: 'https://gibs.earthdata.nasa.gov/legends/GPM_Precipitation_Rate_H.svg'
   };
-  const legendUrl = id => `https://gibs.earthdata.nasa.gov/legends/${id}_H.svg`;
   const precip = gibs('https://gibs.earthdata.nasa.gov/wmts/epsg3857/best',
     'IMERG_Precipitation_Rate', 'GoogleMapsCompatible_Level6',
     precipDate, 6, 0.7, 'Precipitation: NASA GIBS / IMERG');
@@ -173,10 +171,16 @@
   // Deliberately avoids yellow/orange/red/purple/black: in Peru those are
   // SENAMHI's official alert colors, and this layer is historical context.
   const RAMP = ['#1f4b8f', '#2a6fb8', '#3f98d4', '#7cc4e6', '#d6f2fb'];
-  const rateBin = r => Math.min(RAMP.length - 1, Math.floor(Math.min(1, Math.log10(1 + Math.max(0, r)) / 3) * RAMP.length));
+  // Each layer gets its OWN top: 5 equal bins in log1p space between 0 and `top`.
+  // National keeps the fixed 1000‰ cap; Costa Norte uses its real max (set once the data loads),
+  // otherwise it would only reach 3 of the 5 bins. Colors are therefore NOT comparable across layers.
+  const SCALES = { nat: { top: 1000, capped: true }, costa: { top: 1000, capped: false } };
+  const rateBin = (r, sc) => Math.min(RAMP.length - 1,
+    Math.floor(Math.min(1, Math.log1p(Math.max(0, r)) / Math.log1p(sc.top)) * RAMP.length));
   // bin lower edges in ‰ (inverse of the log mapping) for the legend
-  const binEdge = i => Math.round(10 ** (3 * i / RAMP.length) - 1);
-  const rateColor = r => r == null ? null : RAMP[rateBin(r)];
+  const binEdge = (i, sc) => Math.expm1(Math.log1p(sc.top) * i / RAMP.length);
+  const fmtEdge = v => v < 10 ? fmt(Math.round(v * 10) / 10) : fmt(Math.round(v));
+  const rateColor = (r, sc) => r == null ? null : RAMP[rateBin(r, sc)];
   // All rate markers get a pale stroke so even the darkest bin reads on the dark basemap.
   // No data: hollow dashed ring — never a ramp color, so it can't read as "low/safe".
   // Small populations make cumulative rates unstable (1 event in 542 people ≈ 1.8‰), so below
@@ -184,11 +188,11 @@
   // Dashes stay reserved for "no data".
   const SMALL_POP = 2000;
   const isSmall = pop => pop != null && pop > 0 && pop < SMALL_POP;
-  function rateStyle(r, pop) {
+  function rateStyle(r, pop, sc) {
     if (r == null) return { radius: 5, weight: 1.5, color: '#b8c4cc', dashArray: '2 2', fill: false, opacity: .9 };
     return isSmall(pop)
-      ? { radius: 3.5, weight: .5, color: '#e6f0f5', opacity: .3, fillColor: rateColor(r), fillOpacity: .35 }
-      : { radius: 5, weight: 1, color: '#e6f0f5', opacity: .55, fillColor: rateColor(r), fillOpacity: .9 };
+      ? { radius: 3.5, weight: .5, color: '#e6f0f5', opacity: .3, fillColor: rateColor(r, sc), fillOpacity: .35 }
+      : { radius: 5, weight: 1, color: '#e6f0f5', opacity: .55, fillColor: rateColor(r, sc), fillOpacity: .9 };
   }
 
   const layerNational = L.layerGroup();
@@ -211,12 +215,15 @@
       radius: 28, blur: 24, minOpacity: 0.3, max: 1,
       gradient: { 0.25: '#1f4b8f', 0.5: '#2a6fb8', 0.75: '#7cc4e6', 1.0: '#e8f8fd' }
     }).addTo(layerCosta);
+    const costaMax = Math.max(0, ...costa.features.map(f => f.properties.event_rate_per_1000 ?? 0));
+    if (costaMax > 0) SCALES.costa.top = costaMax;
+    renderRateLegend();
     // draw small-population districts first so full-strength circles sit on top
     const bySize = f => isSmall(f.properties.poblacion_2020) ? 0 : 1;
     costa.features.slice().sort((a, b) => bySize(a) - bySize(b)).forEach(f => {
       const c = coords(f); if (!c) return;
       const p = f.properties;
-      L.circleMarker(c, { pane: 'rates', ...rateStyle(p.event_rate_per_1000, p.poblacion_2020) })
+      L.circleMarker(c, { pane: 'rates', ...rateStyle(p.event_rate_per_1000, p.poblacion_2020, SCALES.costa) })
         .bindTooltip(
           `<b>${esc(p.distrito)}</b> (${esc(p.provincia)}, ${esc(p.departamento)})<br>` +
           `Eventos 2003–2021: ${fmt(p.event_count)}<br>` +
@@ -269,7 +276,7 @@
       const liveItem = (id, label, alt, checked) =>
         `<label><input type="checkbox" data-id="${id}" ${checked ? 'checked' : ''}>${label}</label>` +
         `<div class="gibs-legend" id="lg-${id}" ${checked ? '' : 'hidden'}>` +
-        `<img alt="${alt}" src="${legendUrl(LEGENDS[id][0])}" data-try="0"></div>`;
+        `<img alt="${alt}" src="${LEGENDS[id]}"></div>`;
       div.innerHTML = `<details class="ctl"><summary>Capas</summary><div class="scroll">` +
         `<h4>Histórico (archivos estáticos)</h4>` +
         item('nat', layerNational, 'Historial nacional de inundaciones', '#5b7f95', false) +
@@ -288,10 +295,8 @@
         const lg = div.querySelector('#lg-' + cb.dataset.id);
         if (lg) lg.hidden = !cb.checked;
       }));
-      // legend fallback chain → if every candidate fails, link out instead of showing a broken image
+      // if NASA is unreachable, link out instead of showing a broken image
       div.querySelectorAll('.gibs-legend img').forEach(img => img.addEventListener('error', () => {
-        const id = img.parentElement.id.slice(3), next = +img.dataset.try + 1;
-        if (next < LEGENDS[id].length) { img.dataset.try = next; img.src = legendUrl(LEGENDS[id][next]); return; }
         img.parentElement.innerHTML = `<div class="fallback">Leyenda no disponible. ` +
           `<a href="https://worldview.earthdata.nasa.gov/" target="_blank" rel="noopener noreferrer">Ver en NASA Worldview</a></div>`;
       }));
@@ -304,16 +309,27 @@
   map.addControl(new Control());
 
   // ---- legend for capped rate colors ----
+  function renderRateLegend() {
+    const sc = SCALES.costa, n = RAMP.length, el = document.getElementById('lg-costa-rows');
+    if (!el) return;
+    document.getElementById('lg-costa-title').innerHTML = sc.capped
+      ? `Costa Norte: escala hasta ≥${fmt(sc.top)}‰ (tope)`
+      : `Costa Norte: escala hasta ${fmt(Math.round(sc.top))}‰, su máximo real`;
+    el.innerHTML = RAMP.map((col, i) => {
+      const lo = fmtEdge(binEdge(i, sc)), hi = fmtEdge(binEdge(i + 1, sc));
+      const t = i === n - 1 ? (sc.capped ? `≥ ${lo}‰` : `${lo} – ${hi}‰ <small>(máximo)</small>`) : `${lo} – ${hi}‰`;
+      return `<div class="lg-row"><span class="sw rate" style="background:${col}"></span> ${t}</div>`;
+    }).join('') + `<small>Acumulado 2003–2021, escala log.</small>`;
+  }
   const Legend = L.Control.extend({
     options: { position: 'bottomleft' },
     onAdd() {
       const div = L.DomUtil.create('div', 'panel');
-      const n = RAMP.length;
-      const rows = RAMP.map((col, i) => [col, i === n - 1
-        ? `≥ ${fmt(binEdge(i))}‰ <small>(escala con tope en 1,000‰)</small>`
-        : `${fmt(binEdge(i))} – ${fmt(binEdge(i + 1))}‰`]);
-      div.innerHTML = `<details class="ctl"><summary>Eventos / 1000 hab. (acumulado, escala log)</summary>` +
-        rows.map(([col, t]) => `<div class="lg-row"><span class="sw rate" style="background:${col}"></span> ${t}</div>`).join('') +
+      div.innerHTML = `<details class="ctl"><summary>Leyenda</summary>` +
+        `<div id="lg-nat" hidden><h4>Nacional: n° de eventos (mapa de calor, log)</h4>` +
+        `<small>Pondera eventos, no tasas: no comparable en magnitud con Costa Norte.</small></div>` +
+        `<h4 id="lg-costa-title">Costa Norte: eventos / 1000 hab.</h4>` +
+        `<div id="lg-costa-rows"></div>` +
         `<div class="lg-row"><span class="sw small"></span> población &lt; ${fmt(SMALL_POP)} (tasa poco estable, atenuada)</div>` +
         `<div class="lg-row"><span class="sw nodata"></span> sin datos / sin registros</div>` +
         `<small>Círculos en la zona Niño Costero (pasa el cursor o toca).<br>Distritos sin eventos registrados no aparecen: <b>no</b> implica ausencia de riesgo.</small>` +
@@ -324,6 +340,8 @@
     }
   });
   map.addControl(new Legend());
+  renderRateLegend();
+  map.on('layeradd layerremove', () => { document.getElementById('lg-nat').hidden = !map.hasLayer(layerNational); });
   // controls start open on desktop, collapsed on phones so the map stays visible
   const wide = !matchMedia('(max-width: 600px)').matches;
   document.querySelectorAll('details.ctl').forEach(d => { d.open = wide; });
