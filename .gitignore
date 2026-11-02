@@ -1,0 +1,6 @@
+# Archivos grandes: se regeneran con los scripts (ver README)
+data/registro_emergencias_indeci.geojson
+data/emergencias_inundacion_filtered.geojson
+data/pobreza2018.rda
+__pycache__/
+*.pyc

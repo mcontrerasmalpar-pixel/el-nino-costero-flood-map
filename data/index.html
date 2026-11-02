@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Riesgo de inundación – El Niño Costero 2026-2027 (Perú)</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  html, body { height: 100%; margin: 0; background: #111; font-family: system-ui, Segoe UI, Arial, sans-serif; }
+  #map { height: 100%; background: #111; }
+  .panel {
+    background: rgba(20,22,28,.92); color: #e8e8e8; border-radius: 8px; padding: 10px 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.5); font-size: 13px; line-height: 1.35;
+  }
+  .panel h4 { margin: 8px 0 4px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #8fa3b8; }
+  .panel h4:first-child { margin-top: 0; }
+  .panel label { display: flex; align-items: center; gap: 6px; margin: 3px 0; cursor: pointer; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+  .panel small { color: #9aa; }
+  .info-btn { cursor: pointer; color: #6ab0ff; text-decoration: underline; }
+  #info {
+    position: absolute; z-index: 1000; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    width: min(560px, 90vw); max-height: 80vh; overflow: auto; display: none;
+  }
+  #info.open { display: block; }
+  #info p, #info li { margin: 6px 0; }
+  #info button { float: right; }
+  .leaflet-popup-content a { color: #1b6ac9; }
+  .status { color: #f0b429; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="info" class="panel">
+  <button onclick="document.getElementById('info').classList.remove('open')">Cerrar</button>
+  <h4>Metodología y advertencias</h4>
+  <ul>
+    <li><b>Historial (2003–2021):</b> registros INDECI/SINPAD filtrados a fenómenos de lluvia/inundación y agregados por distrito. Es una línea base histórica, <u>no</u> un reporte en vivo del evento 2026-2027; la cobertura termina ~2021-12.</li>
+    <li><b>Mapas de calor:</b> el peso es el número de eventos por distrito en escala logarítmica, para que unos pocos distritos extremos no dominen la escala.</li>
+    <li><b>Tasas por 1,000 hab. (en el tooltip de la capa Niño Costero):</b> son <b>sumas acumuladas de ~19 años de eventos distintos</b> dividida entre la población 2020 — no un porcentaje en un momento dado. Distritos pequeños pueden superar 1,000‰. Los colores usan escala log con tope en 1,000‰.</li>
+    <li><b>Población:</b> proyección INEI a 2020 (Mapa de Pobreza 2018), no 2026. Distritos urbanos de rápido crecimiento quedan subestimados. Sin población → tasa nula.</li>
+    <li><b>Zona Niño Costero:</b> filtro geográfico (Tumbes, Piura, Lambayeque, La Libertad), no un filtro por "años Niño".</li>
+    <li><b>Puntos críticos:</b> sitios validados por CENEPRED/SIGRID; el popup enlaza al PDF fuente.</li>
+    <li><b>Condiciones en vivo (NASA GIBS):</b> anomalía de temperatura superficial del mar (MUR SST, ~4 días de latencia → fecha pedida: hoy−5) y precipitación IMERG (~1 día de latencia → hoy−2). NASA las regenera a diario; no hay backend.</li>
+  </ul>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script>
+(function () {
+  const esc = s => String(s ?? '—').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const fmt = n => (n == null || isNaN(n)) ? '—' : Number(n).toLocaleString('es-PE');
+
+  const map = L.map('map', { center: [-9.2, -75.0], zoom: 6, preferCanvas: true });
+  // Esri dark gray canvas (free, no API key). CARTO's dark_all now returns "API KEY REQUIRED" watermarks.
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ', maxNativeZoom: 16, maxZoom: 19
+  }).addTo(map);
+  map.createPane('labels');
+  map.getPane('labels').style.zIndex = 650;        // above overlays, below popups
+  map.getPane('labels').style.pointerEvents = 'none';
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+    pane: 'labels', maxNativeZoom: 16, maxZoom: 19
+  }).addTo(map);
+
+  // ---- dates for NASA GIBS (UTC, latency-adjusted) ----
+  const daysAgo = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+  const sstDate = daysAgo(5), precipDate = daysAgo(2);
+
+  function gibs(base, layer, tms, date, maxNative, opacity, attribution) {
+    return L.tileLayer(`${base}/${layer}/default/${date}/${tms}/{z}/{y}/{x}.png`, {
+      maxNativeZoom: maxNative, maxZoom: 19, opacity, attribution, crossOrigin: true
+    });
+  }
+  const sst = gibs('https://gibs.earthdata.nasa.gov/wmts/epsg3857/all',
+    'GHRSST_L4_MUR_Sea_Surface_Temperature_Anomalies_v4.1_STD', 'GoogleMapsCompatible_Level7',
+    sstDate, 7, 0.7, 'SST anomaly: NASA GIBS / JPL MUR');
+  const precip = gibs('https://gibs.earthdata.nasa.gov/wmts/epsg3857/best',
+    'IMERG_Precipitation_Rate', 'GoogleMapsCompatible_Level6',
+    precipDate, 6, 0.7, 'Precipitation: NASA GIBS / IMERG');
+
+  // ---- helpers ----
+  const status = {};
+  async function loadGeo(name) {
+    try {
+      const r = await fetch(name);
+      if (!r.ok) throw new Error(r.status);
+      return await r.json();
+    } catch (e) {
+      status[name] = true;
+      console.error('No se pudo cargar', name, e);
+      return { type: 'FeatureCollection', features: [] };
+    }
+  }
+  const coords = f => {
+    const c = f.geometry && f.geometry.coordinates;
+    return (c && isFinite(c[0]) && isFinite(c[1])) ? [c[1], c[0]] : null;
+  };
+  // log-scaled weight in [0.05, 1]
+  function heatPoints(fc) {
+    const feats = fc.features.filter(f => coords(f) && (f.properties.event_count || 0) > 0);
+    const max = Math.log1p(Math.max(1, ...feats.map(f => f.properties.event_count)));
+    return feats.map(f => { const c = coords(f); return [c[0], c[1], Math.max(0.05, Math.log1p(f.properties.event_count) / max)]; });
+  }
+  // rate color: log scale capped at 1000 per mil
+  function rateColor(r) {
+    if (r == null) return '#666';
+    const t = Math.min(1, Math.log10(1 + Math.max(0, r)) / 3); // 0..1000 → 0..1
+    const stops = ['#2c7bb6', '#abd9e9', '#ffffbf', '#fdae61', '#d7191c'];
+    return stops[Math.min(stops.length - 1, Math.floor(t * stops.length))];
+  }
+
+  const layerNational = L.layerGroup();
+  const layerCosta = L.layerGroup();
+  const layerCritical = L.layerGroup();
+
+  Promise.all([
+    loadGeo('emergencias_por_distrito.geojson'),
+    loadGeo('emergencias_distrito_costa_nino.geojson'),
+    loadGeo('puntos_criticos_inundacion.geojson')
+  ]).then(([nat, costa, crit]) => {
+    // Layer 1: national heatmap (blue→red-ish "cool" palette)
+    L.heatLayer(heatPoints(nat), {
+      radius: 18, blur: 22, minOpacity: 0.25, max: 1,
+      gradient: { 0.2: '#3b4cc0', 0.45: '#6fa8dc', 0.7: '#f4e04d', 1.0: '#ffffff' }
+    }).addTo(layerNational);
+
+    // Layer 2: Niño Costero heatmap (warm palette) + hover tooltips with capped-rate color
+    L.heatLayer(heatPoints(costa), {
+      radius: 28, blur: 24, minOpacity: 0.3, max: 1,
+      gradient: { 0.25: '#7a0177', 0.5: '#f03b20', 0.75: '#fd8d3c', 1.0: '#ffeda0' }
+    }).addTo(layerCosta);
+    costa.features.forEach(f => {
+      const c = coords(f); if (!c) return;
+      const p = f.properties;
+      L.circleMarker(c, { radius: 5, weight: 1, color: '#000', fillColor: rateColor(p.event_rate_per_1000), fillOpacity: .8, opacity: .6 })
+        .bindTooltip(
+          `<b>${esc(p.distrito)}</b> (${esc(p.provincia)}, ${esc(p.departamento)})<br>` +
+          `Eventos 2003–2021: ${fmt(p.event_count)}<br>` +
+          `Afectados: ${fmt(p.total_afectados)} · Damnificados: ${fmt(p.total_damnificados)} · Fallecidos: ${fmt(p.total_fallecidos)}<br>` +
+          `Población 2020: ${fmt(p.poblacion_2020)}<br>` +
+          `Eventos/1000 hab. (acumulado): ${p.event_rate_per_1000 == null ? '—' : fmt(p.event_rate_per_1000) + '‰'}<br>` +
+          `Afectados/1000 hab. (acumulado): ${p.afectados_rate_per_1000 == null ? '—' : fmt(p.afectados_rate_per_1000) + '‰'}<br>` +
+          `<small>Suma de ~19 años, no un % puntual; puede superar 1,000‰.</small>`,
+          { sticky: true })
+        .addTo(layerCosta);
+    });
+
+    // Layer 3: CENEPRED critical points
+    const canvas = L.canvas({ padding: 0.5 });
+    crit.features.forEach(f => {
+      const c = coords(f); if (!c) return;
+      const p = f.properties;
+      let link = '';
+      if (typeof p.url === 'string' && /^https?:\/\//i.test(p.url)) {
+        link = `<br><a href="${encodeURI(p.url)}" target="_blank" rel="noopener noreferrer">Ver PDF fuente (CENEPRED)</a>`;
+      }
+      L.circleMarker(c, { renderer: canvas, radius: 4, weight: 1, color: '#fff', fillColor: '#00c2ff', fillOpacity: .85 })
+        .bindPopup(
+          `<b>${esc(p.paraje)}</b><br>` +
+          `Distrito: ${esc(p.nom_dist)} (${esc(p.nom_prov)}, ${esc(p.nom_dpto)})<br>` +
+          `Río/quebrada: ${esc(p.nomb_rio_q)}<br>` +
+          `Familias expuestas: ${esc(p.familias_e)}` + link)
+        .addTo(layerCritical);
+    });
+
+    const failed = Object.keys(status);
+    if (failed.length) {
+      document.getElementById('warn').innerHTML =
+        `<span class="status">No se pudo cargar: ${failed.map(esc).join(', ')}.<br>Sirve la carpeta por HTTP (<code>python -m http.server</code>); file:// no funciona.</span>`;
+    }
+  });
+
+  // ---- default visibility: 2,3,4,5 on; 1 off ----
+  layerCosta.addTo(map); layerCritical.addTo(map); sst.addTo(map); precip.addTo(map);
+
+  // ---- grouped layer control ----
+  const Control = L.Control.extend({
+    options: { position: 'topright' },
+    onAdd() {
+      const div = L.DomUtil.create('div', 'panel');
+      const item = (id, layer, label, color, checked) =>
+        `<label><input type="checkbox" data-id="${id}" ${checked ? 'checked' : ''}><span class="sw" style="background:${color}"></span>${label}</label>`;
+      div.innerHTML =
+        `<h4>Histórico (archivos estáticos)</h4>` +
+        item('nat', layerNational, 'Historial nacional de inundaciones', '#6fa8dc', false) +
+        item('costa', layerCosta, 'Zona Niño Costero', '#f03b20', true) +
+        item('crit', layerCritical, 'Puntos críticos CENEPRED', '#00c2ff', true) +
+        `<h4>Condiciones en vivo (NASA)</h4>` +
+        item('sst', sst, `Anomalía TSM <small>(${sstDate})</small>`, '#e34a33', true) +
+        item('precip', precip, `Precipitación IMERG <small>(${precipDate})</small>`, '#31a354', true) +
+        `<div id="warn" style="margin-top:6px"></div>` +
+        `<div style="margin-top:8px"><span class="info-btn" id="infoBtn">Metodología y advertencias</span></div>`;
+      const layers = { nat: layerNational, costa: layerCosta, crit: layerCritical, sst, precip };
+      div.querySelectorAll('input').forEach(cb => cb.addEventListener('change', () => {
+        const l = layers[cb.dataset.id];
+        cb.checked ? map.addLayer(l) : map.removeLayer(l);
+      }));
+      div.querySelector('#infoBtn').addEventListener('click', () => document.getElementById('info').classList.add('open'));
+      L.DomEvent.disableClickPropagation(div);
+      L.DomEvent.disableScrollPropagation(div);
+      return div;
+    }
+  });
+  map.addControl(new Control());
+
+  // ---- legend for capped rate colors ----
+  const Legend = L.Control.extend({
+    options: { position: 'bottomleft' },
+    onAdd() {
+      const div = L.DomUtil.create('div', 'panel');
+      const rows = [[0, '0‰'], [10, '10‰'], [100, '100‰'], [1000, '≥1,000‰ (tope)']];
+      div.innerHTML = `<h4>Eventos / 1000 hab. (acumulado, escala log)</h4>` +
+        rows.map(([v, t]) => `<div><span class="sw" style="background:${rateColor(v)}"></span> ${t}</div>`).join('') +
+        `<div><span class="sw" style="background:#666"></span> sin población</div>` +
+        `<small>Círculos en la zona Niño Costero (pasa el cursor)</small>`;
+      return div;
+    }
+  });
+  map.addControl(new Legend());
+})();
+</script>
+</body>
+</html>
