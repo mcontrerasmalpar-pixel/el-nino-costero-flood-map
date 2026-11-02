@@ -7,7 +7,13 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   html, body { height: 100%; margin: 0; background: #111; font-family: system-ui, Segoe UI, Arial, sans-serif; }
-  #map { height: 100%; background: #111; }
+  body { display: flex; flex-direction: column; }
+  #map { flex: 1; min-height: 0; background: #111; }
+  /* Status strip: neutral slate on purpose — no alert colors, this page is not an official warning */
+  #strip { background: #1a2129; color: #e8e8e8; border-bottom: 1px solid #2c3742; padding: 6px 12px; font-size: 13px; line-height: 1.4; }
+  #strip a { color: #8cc8ff; }
+  #strip .muted { color: #a9b4bf; font-size: 12px; }
+  #strip .stale { color: #e8e8e8; border: 1px solid #a9b4bf; border-radius: 3px; padding: 0 4px; font-size: 11px; }
   .panel {
     background: rgba(20,22,28,.92); color: #e8e8e8; border-radius: 8px; padding: 10px 12px;
     box-shadow: 0 2px 10px rgba(0,0,0,.5); font-size: 13px; line-height: 1.35;
@@ -33,6 +39,12 @@
 </style>
 </head>
 <body>
+<header id="strip" role="region" aria-label="Estado oficial ENFEN">
+  <div id="enfen">Estado ENFEN: consulta el <a href="https://enfen.imarpe.gob.pe/comunicados/" target="_blank" rel="noopener noreferrer">último comunicado oficial</a>.</div>
+  <div class="muted">Este mapa no es un aviso oficial. Avisos oficiales:
+    <a href="https://www.senamhi.gob.pe/" target="_blank" rel="noopener noreferrer">SENAMHI</a> ·
+    <a href="https://www.gob.pe/indeci" target="_blank" rel="noopener noreferrer">INDECI</a>.</div>
+</header>
 <div id="map"></div>
 
 <div id="info" class="panel">
@@ -55,6 +67,18 @@
 (function () {
   const esc = s => String(s ?? '—').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmt = n => (n == null || isNaN(n)) ? '—' : Number(n).toLocaleString('es-PE');
+
+  // ---- ENFEN status strip: dated info from enfen_status.json, never presented as live ----
+  fetch('enfen_status.json').then(r => r.ok ? r.json() : Promise.reject(r.status)).then(st => {
+    if (!/^https:\/\//.test(st.url) || !/^\d{4}-\d{2}-\d{2}$/.test(st.fecha)) return;
+    const d = new Date(st.fecha + 'T12:00:00Z');
+    const ageDays = Math.floor((Date.now() - d) / 864e5);
+    const fecha = d.toLocaleDateString('es-PE', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+    document.getElementById('enfen').innerHTML =
+      `Estado ENFEN al ${esc(fecha)}: <b>${esc(st.estado)}</b> · ` +
+      `<a href="${encodeURI(st.url)}" target="_blank" rel="noopener noreferrer">${esc(st.comunicado)}</a>` +
+      (ageDays > 21 ? ` <span class="stale">dato de hace ${ageDays} días — verifica el comunicado vigente</span>` : '');
+  }).catch(e => console.error('enfen_status.json', e));
 
   const map = L.map('map', { center: [-9.2, -75.0], zoom: 6, preferCanvas: true });
   // Esri dark gray canvas (free, no API key). CARTO's dark_all now returns "API KEY REQUIRED" watermarks.
