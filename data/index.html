@@ -24,6 +24,7 @@
   .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
   .sw.rate { width: 12px; height: 12px; box-sizing: border-box; border: 1px solid rgba(230,240,245,.55); }
   .sw.nodata { width: 12px; height: 12px; box-sizing: border-box; border: 1.5px dashed #b8c4cc; background: transparent; }
+  .sw.small { width: 8px; height: 8px; margin: 0 2px; background: rgba(124,196,230,.35); border: .5px solid rgba(230,240,245,.3); }
   .lg-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
   .panel small { color: #9aa; }
   /* NASA GIBS legends are matplotlib SVGs: transparent background + black text → need a light plate */
@@ -157,9 +158,15 @@
   const rateColor = r => r == null ? null : RAMP[rateBin(r)];
   // All rate markers get a pale stroke so even the darkest bin reads on the dark basemap.
   // No data: hollow dashed ring — never a ramp color, so it can't read as "low/safe".
-  function rateStyle(r) {
-    return r == null
-      ? { radius: 5, weight: 1.5, color: '#b8c4cc', dashArray: '2 2', fill: false, opacity: .9 }
+  // Small populations make cumulative rates unstable (1 event in 542 people ≈ 1.8‰), so below
+  // SMALL_POP (~p5 of the Niño Costero districts) circles are smaller and translucent: same hue, quieter.
+  // Dashes stay reserved for "no data".
+  const SMALL_POP = 2000;
+  const isSmall = pop => pop != null && pop > 0 && pop < SMALL_POP;
+  function rateStyle(r, pop) {
+    if (r == null) return { radius: 5, weight: 1.5, color: '#b8c4cc', dashArray: '2 2', fill: false, opacity: .9 };
+    return isSmall(pop)
+      ? { radius: 3.5, weight: .5, color: '#e6f0f5', opacity: .3, fillColor: rateColor(r), fillOpacity: .35 }
       : { radius: 5, weight: 1, color: '#e6f0f5', opacity: .55, fillColor: rateColor(r), fillOpacity: .9 };
   }
 
@@ -183,10 +190,12 @@
       radius: 28, blur: 24, minOpacity: 0.3, max: 1,
       gradient: { 0.25: '#1f4b8f', 0.5: '#2a6fb8', 0.75: '#7cc4e6', 1.0: '#e8f8fd' }
     }).addTo(layerCosta);
-    costa.features.forEach(f => {
+    // draw small-population districts first so full-strength circles sit on top
+    const bySize = f => isSmall(f.properties.poblacion_2020) ? 0 : 1;
+    costa.features.slice().sort((a, b) => bySize(a) - bySize(b)).forEach(f => {
       const c = coords(f); if (!c) return;
       const p = f.properties;
-      L.circleMarker(c, { pane: 'rates', ...rateStyle(p.event_rate_per_1000) })
+      L.circleMarker(c, { pane: 'rates', ...rateStyle(p.event_rate_per_1000, p.poblacion_2020) })
         .bindTooltip(
           `<b>${esc(p.distrito)}</b> (${esc(p.provincia)}, ${esc(p.departamento)})<br>` +
           `Eventos 2003–2021: ${fmt(p.event_count)}<br>` +
@@ -194,6 +203,7 @@
           `Población 2020: ${fmt(p.poblacion_2020)}<br>` +
           `Eventos/1000 hab. (acumulado): ${p.event_rate_per_1000 == null ? '—' : fmt(p.event_rate_per_1000) + '‰'}<br>` +
           `Afectados/1000 hab. (acumulado): ${p.afectados_rate_per_1000 == null ? '—' : fmt(p.afectados_rate_per_1000) + '‰'}<br>` +
+          (isSmall(p.poblacion_2020) ? `<small><b>Población &lt; ${fmt(SMALL_POP)}:</b> tasa poco estable, se muestra atenuada.</small><br>` : '') +
           `<small>Suma de ~19 años, no un % puntual; puede superar 1,000‰.</small>`,
           { sticky: true })
         .addTo(layerCosta);
@@ -282,6 +292,7 @@
         : `${fmt(binEdge(i))} – ${fmt(binEdge(i + 1))}‰`]);
       div.innerHTML = `<h4>Eventos / 1000 hab. (acumulado, escala log)</h4>` +
         rows.map(([col, t]) => `<div class="lg-row"><span class="sw rate" style="background:${col}"></span> ${t}</div>`).join('') +
+        `<div class="lg-row"><span class="sw small"></span> población &lt; ${fmt(SMALL_POP)} (tasa poco estable, atenuada)</div>` +
         `<div class="lg-row"><span class="sw nodata"></span> sin datos / sin registros</div>` +
         `<small>Círculos en la zona Niño Costero (pasa el cursor).<br>Distritos sin eventos registrados no aparecen: <b>no</b> implica ausencia de riesgo.</small>`;
       return div;
