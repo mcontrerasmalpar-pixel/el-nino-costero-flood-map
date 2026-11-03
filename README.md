@@ -144,7 +144,7 @@ Archivos grandes excluidos del repositorio (`.gitignore`) y regenerables con los
 
 **`puntos_criticos_inundacion.geojson`** (9,964 puntos): atributos de CENEPRED/SIGRID. El visor usa `paraje`, `nom_dist`, `nom_prov`, `nom_dpto`, `nomb_rio_q`, `familias_e` y `url` (PDF fuente).
 
-**`enfen_status.json`**: `estado`, `comunicado`, `fecha` (YYYY-MM-DD) y `url`.
+**`enfen_status.json`**: `estado`, `comunicado`, `fecha` (YYYY-MM-DD), `proximo` (fecha anunciada del siguiente comunicado) y `url`.
 
 ## Visualizacion y decisiones de diseno
 
@@ -177,7 +177,7 @@ El mapa base es Esri World Dark Gray (gratuito, sin clave). No se requiere ningu
 
 ## Mantenimiento
 
-- **Estado ENFEN:** ENFEN publica un comunicado cada ~2 semanas. Actualizar `data/enfen_status.json` (`estado`, `comunicado`, `fecha`, `url`) con cada uno; preferir el enlace directo al comunicado en vez del indice. Pasados 21 dias la pagina marca el dato como posiblemente desactualizado.
+- **Estado ENFEN:** ENFEN publica un comunicado cada ~2 semanas. Actualizar `data/enfen_status.json` (`estado`, `comunicado`, `fecha`, `url`) con cada uno; preferir el enlace directo al comunicado en vez del indice. La pagina muestra la fecha prevista del siguiente comunicado (`proximo`) y marca el dato como desactualizado un dia despues de esa fecha (a los 21 dias si falta el campo). Comunicado vigente cargado: N° 19-2026, 30/10/2026, verificado contra el PDF oficial; proximo: 13/11/2026.
 - **Datos historicos:** el registro termina en ~2021-12. Para extenderlo hay que volver a correr el pipeline completo cuando MINAM/INDECI publiquen mas fechas.
 - **Poblacion:** es proyeccion a 2020. Si INEI publica una proyeccion mas reciente, regenerar `population_por_distrito.json` y volver a correr `add_population_rates.py`.
 - **Nombres de leyendas GIBS:** se nombran por familia de colormap, no por id de capa. Si cambian las capas, verificar la URL en `gibs.earthdata.nasa.gov/legends/`.
