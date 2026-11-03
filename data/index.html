@@ -99,13 +99,19 @@
   // ---- ENFEN status strip: dated info from enfen_status.json, never presented as live ----
   fetch('enfen_status.json').then(r => r.ok ? r.json() : Promise.reject(r.status)).then(st => {
     if (!/^https:\/\//.test(st.url) || !/^\d{4}-\d{2}-\d{2}$/.test(st.fecha)) return;
-    const d = new Date(st.fecha + 'T12:00:00Z');
+    const day = iso => new Date(iso + 'T12:00:00Z');
+    const fmtD = d => d.toLocaleDateString('es-PE', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+    const d = day(st.fecha);
     const ageDays = Math.floor((Date.now() - d) / 864e5);
-    const fecha = d.toLocaleDateString('es-PE', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+    // Stale once the next communiqué is due (+1 day grace); falls back to 21 days if `proximo` is missing.
+    const hasNext = /^\d{4}-\d{2}-\d{2}$/.test(st.proximo || '');
+    const next = hasNext ? day(st.proximo) : null;
+    const stale = hasNext ? Date.now() > next.getTime() + 864e5 : ageDays > 21;
     document.getElementById('enfen').innerHTML =
-      `Estado ENFEN al ${esc(fecha)}: <b>${esc(st.estado)}</b> · ` +
+      `Estado ENFEN al ${esc(fmtD(d))}: <b>${esc(st.estado)}</b> · ` +
       `<a href="${encodeURI(st.url)}" target="_blank" rel="noopener noreferrer">${esc(st.comunicado)}</a>` +
-      (ageDays > 21 ? ` <span class="stale">dato de hace ${ageDays} días — verifica el comunicado vigente</span>` : '');
+      (hasNext && !stale ? ` <span class="muted">· próximo comunicado previsto: ${esc(fmtD(next))}</span>` : '') +
+      (stale ? ` <span class="stale">dato de hace ${ageDays} días — verifica el comunicado vigente</span>` : '');
   }).catch(e => console.error('enfen_status.json', e));
 
   const map = L.map('map', { center: [-9.2, -75.0], zoom: 6, preferCanvas: true });

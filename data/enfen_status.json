@@ -1,7 +1,8 @@
 {
-  "_nota": "Informacion fechada. ENFEN publica un comunicado oficial cada ~2 semanas: actualizar estos campos con cada uno. La pagina avisa si 'fecha' tiene mas de 21 dias.",
+  "_nota": "Informacion fechada, transcrita del comunicado (verificada contra el PDF oficial). Actualizar estos campos con cada comunicado. La pagina marca el dato como desactualizado cuando pasa la fecha 'proximo' (o a los 21 dias si falta).",
   "estado": "Alerta de El Niño Costero",
   "comunicado": "Comunicado Oficial ENFEN N° 19-2026",
   "fecha": "2026-10-30",
+  "proximo": "2026-11-13",
   "url": "https://enfen.imarpe.gob.pe/comunicados/"
 }
