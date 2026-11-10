@@ -24,6 +24,8 @@
   .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
   .sw.rate { width: 12px; height: 12px; box-sizing: border-box; border: 1px solid rgba(230,240,245,.55); }
   .sw.nodata { width: 12px; height: 12px; box-sizing: border-box; border: 1.5px dashed #b8c4cc; background: transparent; }
+  .sw.ring { width: 14px; height: 14px; border: 2px solid rgba(241,226,211,.75); }   /* same pale stroke as the map ring */
+  .legend-panel { max-width: min(400px, calc(100vw - 24px)); max-height: 60vh; overflow-y: auto; }
   .sw.small { width: 8px; height: 8px; margin: 0 2px; background: rgba(124,196,230,.35); border: .5px solid rgba(230,240,245,.3); }
   .lg-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
   .panel small { color: #9aa; }
@@ -83,6 +85,7 @@
     <li><b>Mapas de calor:</b> el peso es el número de eventos por distrito en escala logarítmica, para que unos pocos distritos extremos no dominen la escala.</li>
     <li><b>Tasas por 1,000 hab. (en el tooltip de la capa Niño Costero):</b> son <b>sumas acumuladas de ~19 años de eventos distintos</b> dividida entre la población 2020 — no un porcentaje en un momento dado. Distritos pequeños pueden superar 1,000‰. Los colores usan escala log; cada capa tiene su propio tope (Costa Norte: su máximo real, ~31‰), así que los colores no son comparables entre capas.</li>
     <li><b>Población:</b> proyección INEI a 2020 (Mapa de Pobreza 2018), no 2026. Distritos urbanos de rápido crecimiento quedan subestimados. Sin población → tasa nula.</li>
+    <li><b>Riesgo predicho (ML, baseline):</b> XGBoost entrenado sobre la tasa histórica de eventos por 1,000 hab. de los 199 distritos de la zona, con precipitación (NASA POWER, 2003–2021), elevación (Copernicus DEM) y cercanía a puntos críticos CENEPRED. Se muestra la predicción <u>fuera de muestra</u> (validación dejando provincias fuera). Capta el patrón espacial del historial, <u>no</u> es un pronóstico del evento 2026-2027; suaviza los extremos (máx. predicho ≪ máx. observado) y parte del patrón proviene de que los distritos serranos son pequeños y tienen tasas altas. Detalles y métricas en el README.</li>
     <li><b>Zona Niño Costero:</b> filtro geográfico (Tumbes, Piura, Lambayeque, La Libertad), no un filtro por "años Niño".</li>
     <li><b>Puntos críticos:</b> sitios validados por CENEPRED/SIGRID; el popup enlaza al PDF fuente.</li>
     <li><b>Condiciones en vivo (NASA GIBS):</b> anomalía de temperatura superficial del mar (MUR SST, ~4 días de latencia → fecha pedida: hoy−5) y precipitación IMERG (~1 día de latencia → hoy−2). NASA las regenera a diario; no hay backend.</li>
@@ -124,6 +127,8 @@
   map.getPane('labels').style.pointerEvents = 'none';
   map.createPane('rates');                         // rate circles above the dense CENEPRED points
   map.getPane('rates').style.zIndex = 450;
+  map.createPane('risk');                          // ML rings below the rate dots so both stay readable
+  map.getPane('risk').style.zIndex = 440;
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
     pane: 'labels', maxNativeZoom: 16, maxZoom: 19
   }).addTo(map);
@@ -201,15 +206,26 @@
       : { radius: 5, weight: 1, color: '#e6f0f5', opacity: .55, fillColor: rateColor(r, sc), fillOpacity: .9 };
   }
 
+  // ML predicted-risk layer: desaturated terracotta/clay ramp (hue 9–30°, sat ≤ 52%, so it reads brown,
+  // not SENAMHI's saturated orange). Not blue (observed rates), not mint (CENEPRED), not yellow/orange/red/purple.
+  // Drawn as a larger RING (not a dot) so it never relies on color alone: it sits around the observed-rate dot.
+  const RISK_RAMP = ['#4a3430', '#7a5240', '#a8785a', '#d0a889', '#f1e2d3'];
+  SCALES.riesgo = { top: 1000, capped: false };          // own top = max predicted (set on load)
+  const riskColor = r => RISK_RAMP[rateBin(r, SCALES.riesgo)];
+  const riskStyle = r => ({ pane: 'risk', radius: 9, weight: 1.5, color: '#f1e2d3', opacity: .75,
+                            fillColor: riskColor(r), fillOpacity: .85 });
+
   const layerNational = L.layerGroup();
   const layerCosta = L.layerGroup();
+  const layerRiesgo = L.layerGroup();
   const layerCritical = L.layerGroup();
 
   Promise.all([
     loadGeo('emergencias_por_distrito.geojson'),
     loadGeo('emergencias_distrito_costa_nino.geojson'),
-    loadGeo('puntos_criticos_inundacion.geojson')
-  ]).then(([nat, costa, crit]) => {
+    loadGeo('puntos_criticos_inundacion.geojson'),
+    loadGeo('riesgo_predicho_costa_nino.geojson')
+  ]).then(([nat, costa, crit, riesgo]) => {
     // Layer 1: national heatmap (slate ramp, distinct from the Niño Costero blues)
     L.heatLayer(heatPoints(nat), {
       radius: 18, blur: 22, minOpacity: 0.25, max: 1,
@@ -241,6 +257,23 @@
           `<small>Suma de ~19 años, no un % puntual; puede superar 1,000‰.</small>`,
           { sticky: true })
         .addTo(layerCosta);
+    });
+
+    // Layer 4: ML predicted risk (out-of-fold XGBoost estimate of events per 1000 inhabitants)
+    const predMax = Math.max(0, ...riesgo.features.map(f => f.properties.riesgo_predicho ?? 0));
+    if (predMax > 0) SCALES.riesgo.top = predMax;
+    renderRiskLegend();
+    riesgo.features.forEach(f => {
+      const c = coords(f); if (!c || f.properties.riesgo_predicho == null) return;
+      const p = f.properties;
+      L.circleMarker(c, riskStyle(p.riesgo_predicho))
+        .bindTooltip(
+          `<b>${esc(p.distrito)}</b> (${esc(p.provincia)}, ${esc(p.departamento)})<br>` +
+          `<b>Riesgo predicho (ML): ${fmt(p.riesgo_predicho)}‰</b> · percentil ${fmt(Math.round(p.riesgo_predicho_percentil))} de ${fmt(riesgo.features.length)} distritos<br>` +
+          `Observado 2003–2021: ${p.event_rate_per_1000 == null ? '—' : fmt(p.event_rate_per_1000) + '‰'} · población 2020: ${fmt(p.poblacion_2020)}<br>` +
+          `<small>Estimación fuera de muestra de un modelo baseline (precipitación, elevación, puntos críticos) entrenado con este mismo historial. No es un pronóstico 2026–27 ni un aviso oficial.</small>`,
+          { sticky: true })
+        .addTo(layerRiesgo);
     });
 
     // Layer 3: CENEPRED critical points
@@ -288,13 +321,15 @@
         item('nat', layerNational, 'Historial nacional de inundaciones', '#5b7f95', false) +
         item('costa', layerCosta, 'Zona Niño Costero', '#3f98d4', true) +
         item('crit', layerCritical, 'Puntos críticos CENEPRED', '#5fd3a0', true) +
+        `<h4>Modelo (baseline ML)</h4>` +
+        item('riesgo', layerRiesgo, 'Riesgo predicho (ML)', '#a8785a', false) +
         `<h4>Condiciones en vivo (NASA)</h4>` +
         liveItem('sst', `Anomalía TSM <small>(${sstDate})</small>`, 'Leyenda NASA GIBS: anomalía de temperatura superficial del mar (°C)', true) +
         liveItem('precip', `Precipitación IMERG <small>(${precipDate})</small>`, 'Leyenda NASA GIBS: tasa de precipitación IMERG (mm/h)', true) +
         `<div id="warn" style="margin-top:6px"></div>` +
         `<div style="margin-top:8px"><button type="button" class="info-btn" id="infoBtn">Metodología y advertencias</button></div>` +
         `</div></details>`;
-      const layers = { nat: layerNational, costa: layerCosta, crit: layerCritical, sst, precip };
+      const layers = { nat: layerNational, costa: layerCosta, crit: layerCritical, riesgo: layerRiesgo, sst, precip };
       div.querySelectorAll('input').forEach(cb => cb.addEventListener('change', () => {
         const l = layers[cb.dataset.id];
         cb.checked ? map.addLayer(l) : map.removeLayer(l);
@@ -327,13 +362,28 @@
       return `<div class="lg-row"><span class="sw rate" style="background:${col}"></span> ${t}</div>`;
     }).join('') + `<small>Acumulado 2003–2021, escala log.</small>`;
   }
+  function renderRiskLegend() {
+    const sc = SCALES.riesgo, n = RISK_RAMP.length, el = document.getElementById('lg-riesgo-rows');
+    if (!el) return;
+    document.getElementById('lg-riesgo-title').innerHTML =
+      `Riesgo predicho (ML): escala hasta ${fmtEdge(sc.top)}‰, el máximo predicho`;
+    el.innerHTML = RISK_RAMP.map((col, i) => {
+      const lo = fmtEdge(binEdge(i, sc)), hi = fmtEdge(binEdge(i + 1, sc));
+      return `<div class="lg-row"><span class="sw rate ring" style="background:${col}"></span> ` +
+        `${lo} – ${hi}‰${i === n - 1 ? ' <small>(máximo)</small>' : ''}</div>`;
+    }).join('') +
+      `<small>Anillo grande = estimación del modelo (eventos/1000 hab., escala log, fuera de muestra). ` +
+      `El máximo observado es ${fmt(Math.round(SCALES.costa.top))}‰: el modelo suaviza los extremos, así que los colores no son comparables con la escala de tasas observadas.</small>`;
+  }
   const Legend = L.Control.extend({
     options: { position: 'bottomleft' },
     onAdd() {
       const div = L.DomUtil.create('div', 'panel');
+      div.classList.add('legend-panel');
       div.innerHTML = `<details class="ctl"><summary>Leyenda</summary>` +
         `<div id="lg-nat" hidden><h4>Nacional: n° de eventos (mapa de calor, log)</h4>` +
         `<small>Pondera eventos, no tasas: no comparable en magnitud con Costa Norte.</small></div>` +
+        `<div id="lg-riesgo" hidden><h4 id="lg-riesgo-title">Riesgo predicho (ML)</h4><div id="lg-riesgo-rows"></div></div>` +
         `<h4 id="lg-costa-title">Costa Norte: eventos / 1000 hab.</h4>` +
         `<div id="lg-costa-rows"></div>` +
         `<div class="lg-row"><span class="sw small"></span> población &lt; ${fmt(SMALL_POP)} (tasa poco estable, atenuada)</div>` +
@@ -347,7 +397,10 @@
   });
   map.addControl(new Legend());
   renderRateLegend();
-  map.on('layeradd layerremove', () => { document.getElementById('lg-nat').hidden = !map.hasLayer(layerNational); });
+  map.on('layeradd layerremove', () => {
+    document.getElementById('lg-nat').hidden = !map.hasLayer(layerNational);
+    document.getElementById('lg-riesgo').hidden = !map.hasLayer(layerRiesgo);
+  });
   // controls start open on desktop, collapsed on phones so the map stays visible
   const wide = !matchMedia('(max-width: 600px)').matches;
   document.querySelectorAll('details.ctl').forEach(d => { d.open = wide; });

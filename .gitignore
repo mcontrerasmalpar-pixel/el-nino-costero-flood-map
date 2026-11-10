@@ -4,3 +4,4 @@ data/emergencias_inundacion_filtered.geojson
 data/pobreza2018.rda
 __pycache__/
 *.pyc
+data/_cache/

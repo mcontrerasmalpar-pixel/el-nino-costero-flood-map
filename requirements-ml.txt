@@ -1,0 +1,9 @@
+# Dependencias de train_flood_risk.py (el pipeline de datos base usa requests, pandas y pyreadr)
+numpy>=2.0
+pandas>=2.2
+scipy>=1.13
+scikit-learn>=1.6      # GroupKFold(shuffle=True)
+xgboost>=2.0
+lightgbm>=4.0          # opcional: --model lightgbm
+rasterio>=1.4          # lectura del DEM Copernicus (COG) por HTTP
+requests>=2.31

@@ -1,0 +1,320 @@
+{
+  "generado": "2026-11-10",
+  "modelo": "xgboost",
+  "n_distritos": 199,
+  "n_provincias": 26,
+  "target": "log1p(event_rate_per_1000), eventos de lluvia/inundacion 2003-2021",
+  "pesos": "log10(poblacion_2020)",
+  "features": [
+    "precip_anual_mm",
+    "precip_p95_mm",
+    "precip_max_diaria_mm",
+    "dias_lluvia_fuerte_anual",
+    "precip_max_anual_media_mm",
+    "precip_cv_anual",
+    "elev_m",
+    "elev_std_1km",
+    "n_criticos_10km",
+    "n_criticos_25km",
+    "dist_critico_km",
+    "familias_exp_10km"
+  ],
+  "series_precipitacion_distintas": 35,
+  "validacion": {
+    "split_por_provincias": {
+      "n_train": 156,
+      "n_test": 43,
+      "provincias_test": [
+        "1301",
+        "1309",
+        "1310",
+        "1312",
+        "2002",
+        "2402"
+      ],
+      "modelos": {
+        "dummy": {
+          "test": {
+            "rmse_log": 0.821309753016207,
+            "rmse_permil": 4.927760878867479,
+            "mae_permil": 2.697802072297227,
+            "r2_log": -0.04057294317232718,
+            "spearman": null
+          },
+          "train": {
+            "rmse_log": 0.7560268521362814,
+            "rmse_permil": 4.177032994021237,
+            "mae_permil": 2.3211101652475974,
+            "r2_log": -0.009181491859867164,
+            "spearman": null
+          }
+        },
+        "ridge": {
+          "test": {
+            "rmse_log": 0.691292784745031,
+            "rmse_permil": 4.738685013544252,
+            "mae_permil": 2.598895084246814,
+            "r2_log": 0.2628045991262127,
+            "spearman": 0.5990637269707038
+          },
+          "train": {
+            "rmse_log": 0.5143903281174592,
+            "rmse_permil": 3.300205768695773,
+            "mae_permil": 1.686581726896956,
+            "r2_log": 0.5328241077644429,
+            "spearman": 0.7386760738358136
+          }
+        },
+        "xgboost": {
+          "test": {
+            "rmse_log": 0.7113518271751073,
+            "rmse_permil": 4.802969750903023,
+            "mae_permil": 2.6697346227501715,
+            "r2_log": 0.2194019324190406,
+            "spearman": 0.5039263062518876
+          },
+          "train": {
+            "rmse_log": 0.19140617083793482,
+            "rmse_permil": 1.5404376644958144,
+            "mae_permil": 0.6790750149564866,
+            "r2_log": 0.9353145348239305,
+            "spearman": 0.9709345054373612
+          }
+        }
+      }
+    },
+    "cv_repetida": {
+      "folds": 5,
+      "repeticiones": 20,
+      "resultados": {
+        "dummy": {
+          "rmse_log": {
+            "mean": 0.7873912841249283,
+            "sd": 0.015163005247699719
+          },
+          "rmse_permil": {
+            "mean": 4.36591182006846,
+            "sd": 0.024005127727007865
+          },
+          "mae_permil": {
+            "mean": 2.4500716475396924,
+            "sd": 0.04182052443986402
+          },
+          "r2_log": {
+            "mean": -0.059397203780742036,
+            "sd": 0.04126367648892685
+          },
+          "spearman": {
+            "mean": null,
+            "sd": null
+          }
+        },
+        "ridge": {
+          "rmse_log": {
+            "mean": 0.6518071484434713,
+            "sd": 0.02509123912796271
+          },
+          "rmse_permil": {
+            "mean": 5.865183791478172,
+            "sd": 1.0699868088778761
+          },
+          "mae_permil": {
+            "mean": 2.396791615270108,
+            "sd": 0.1445867077759665
+          },
+          "r2_log": {
+            "mean": 0.2732284557022791,
+            "sd": 0.05717736670276451
+          },
+          "spearman": {
+            "mean": 0.6153136251818634,
+            "sd": 0.0395966788967251
+          }
+        },
+        "xgboost": {
+          "rmse_log": {
+            "mean": 0.6100619844758456,
+            "sd": 0.018293342063027362
+          },
+          "rmse_permil": {
+            "mean": 3.8434352367805027,
+            "sd": 0.06054744198150026
+          },
+          "mae_permil": {
+            "mean": 2.0076829092853496,
+            "sd": 0.041832613775178655
+          },
+          "r2_log": {
+            "mean": 0.3637103731618223,
+            "sd": 0.038651294907872565
+          },
+          "spearman": {
+            "mean": 0.6504549348974743,
+            "sd": 0.02912846839224905
+          }
+        },
+        "xgboost_split_aleatorio": {
+          "rmse_log": {
+            "mean": 0.5500972317120143,
+            "sd": 0.015397904307513963
+          },
+          "rmse_permil": {
+            "mean": 3.7435574085473617,
+            "sd": 0.07557279033507688
+          },
+          "mae_permil": {
+            "mean": 1.9147863990581115,
+            "sd": 0.05503033095072424
+          },
+          "r2_log": {
+            "mean": 0.48270813274075863,
+            "sd": 0.029075476470625427
+          },
+          "spearman": {
+            "mean": 0.7510357670303672,
+            "sd": 0.013846884262492993
+          }
+        }
+      }
+    },
+    "ablacion": {
+      "repeticiones": 10,
+      "resultados": {
+        "solo_precipitacion": {
+          "rmse_log": {
+            "mean": 0.7177915349200569,
+            "sd": 0.036647705513557345
+          },
+          "rmse_permil": {
+            "mean": 4.086647701822666,
+            "sd": 0.0887711017535571
+          },
+          "mae_permil": {
+            "mean": 2.1849346516729273,
+            "sd": 0.07190581215101714
+          },
+          "r2_log": {
+            "mean": 0.11764393871093168,
+            "sd": 0.08583476628282563
+          },
+          "spearman": {
+            "mean": 0.45933155773097045,
+            "sd": 0.06040751720324648
+          }
+        },
+        "solo_elevacion": {
+          "rmse_log": {
+            "mean": 0.6700284566730563,
+            "sd": 0.010355896008723822
+          },
+          "rmse_permil": {
+            "mean": 4.0009014474939715,
+            "sd": 0.05892001489944231
+          },
+          "mae_permil": {
+            "mean": 2.175536380016116,
+            "sd": 0.053222744655849814
+          },
+          "r2_log": {
+            "mean": 0.23297976561623587,
+            "sd": 0.023607927655774578
+          },
+          "spearman": {
+            "mean": 0.5500347407145098,
+            "sd": 0.020807743684703044
+          }
+        },
+        "solo_cenepred": {
+          "rmse_log": {
+            "mean": 0.8427352938265116,
+            "sd": 0.026653262426176626
+          },
+          "rmse_permil": {
+            "mean": 4.224911507465215,
+            "sd": 0.08766936450240682
+          },
+          "mae_permil": {
+            "mean": 2.5771656352873684,
+            "sd": 0.08760743672961879
+          },
+          "r2_log": {
+            "mean": -0.2143200113610967,
+            "sd": 0.07614078726247148
+          },
+          "spearman": {
+            "mean": -0.02193821587653995,
+            "sd": 0.062307685115816074
+          }
+        },
+        "sin_cenepred": {
+          "rmse_log": {
+            "mean": 0.6163005530225082,
+            "sd": 0.017870712976528914
+          },
+          "rmse_permil": {
+            "mean": 3.8566913407451056,
+            "sd": 0.04999483404077416
+          },
+          "mae_permil": {
+            "mean": 2.01947946156349,
+            "sd": 0.06566884736052755
+          },
+          "r2_log": {
+            "mean": 0.3506681401484275,
+            "sd": 0.03824083951172198
+          },
+          "spearman": {
+            "mean": 0.6409163169010066,
+            "sd": 0.02976793034592192
+          }
+        },
+        "todas": {
+          "rmse_log": {
+            "mean": 0.6155160984871918,
+            "sd": 0.022039021322269026
+          },
+          "rmse_permil": {
+            "mean": 3.8540968496007957,
+            "sd": 0.07610313540779534
+          },
+          "mae_permil": {
+            "mean": 2.0169917198885026,
+            "sd": 0.050459212901160275
+          },
+          "r2_log": {
+            "mean": 0.3520345418420984,
+            "sd": 0.04670104192731037
+          },
+          "spearman": {
+            "mean": 0.6419927177718504,
+            "sd": 0.035319962304639914
+          }
+        }
+      }
+    }
+  },
+  "importancia_modelo_final": {
+    "precip_anual_mm": 0.3248971104621887,
+    "dias_lluvia_fuerte_anual": 0.15907254815101624,
+    "precip_p95_mm": 0.08091697841882706,
+    "elev_m": 0.07361845672130585,
+    "precip_max_anual_media_mm": 0.07023818790912628,
+    "elev_std_1km": 0.06493231654167175,
+    "familias_exp_10km": 0.047008730471134186,
+    "precip_max_diaria_mm": 0.043448932468891144,
+    "n_criticos_25km": 0.03826477751135826,
+    "n_criticos_10km": 0.0382019504904747,
+    "dist_critico_km": 0.033105749636888504,
+    "precip_cv_anual": 0.02629431150853634
+  },
+  "prediccion_max_permil": 9.248304846977263,
+  "confusion_con_poblacion": {
+    "spearman_tasa_vs_poblacion": -0.7746587289927089,
+    "spearman_elevacion_vs_poblacion": -0.3598568600578651,
+    "spearman_predicho_vs_poblacion": -0.4211770976092584,
+    "spearman_observado_vs_predicho": 0.6694386092880038,
+    "distritos_20k_hab_n": 64,
+    "spearman_observado_vs_predicho_20k_hab": 0.5063244771906495
+  },
+  "semilla": 42
+}
