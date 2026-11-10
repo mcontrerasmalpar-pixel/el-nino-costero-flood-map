@@ -419,6 +419,19 @@ def main() -> None:
           f"min={pred_permil.min():.2f}‰ max={pred_permil.max():.2f}‰ "
           f"(observado max={df['event_rate_per_1000'].max():.2f}‰)")
 
+    # ---- 6) confusion con la poblacion: la tasa = eventos / poblacion, asi que distritos chicos tienen tasas altas
+    obs = df["event_rate_per_1000"].to_numpy(dtype="float64")
+    pop = df["poblacion_2020"].to_numpy(dtype="float64")
+    big = pop >= 20_000
+    rho = lambda a, b: float(spearmanr(a, b).statistic)
+    confusion = {"spearman_tasa_vs_poblacion": rho(obs, pop),
+                 "spearman_elevacion_vs_poblacion": rho(df["elev_m"], pop),
+                 "spearman_predicho_vs_poblacion": rho(pred_permil, pop),
+                 "spearman_observado_vs_predicho": rho(obs, pred_permil),
+                 "distritos_20k_hab_n": int(big.sum()),
+                 "spearman_observado_vs_predicho_20k_hab": rho(obs[big], pred_permil[big])}
+    print("\nConfusion con poblacion:", {k: round(v, 2) if isinstance(v, float) else v for k, v in confusion.items()})
+
     METRICS_JSON.write_text(json.dumps(nan_to_none({
         "generado": date.today().isoformat(),
         "modelo": args.model,
@@ -432,6 +445,7 @@ def main() -> None:
                        "ablacion": {"repeticiones": N_REPEATS_ABLATION, "resultados": ablation}},
         "importancia_modelo_final": importance,
         "prediccion_max_permil": float(pred_permil.max()),
+        "confusion_con_poblacion": confusion,
         "semilla": SEED,
     }), ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"metricas -> {METRICS_JSON.relative_to(ROOT)}")

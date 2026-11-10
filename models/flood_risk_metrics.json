@@ -308,5 +308,13 @@
     "precip_cv_anual": 0.02629431150853634
   },
   "prediccion_max_permil": 9.248304846977263,
+  "confusion_con_poblacion": {
+    "spearman_tasa_vs_poblacion": -0.7746587289927089,
+    "spearman_elevacion_vs_poblacion": -0.3598568600578651,
+    "spearman_predicho_vs_poblacion": -0.4211770976092584,
+    "spearman_observado_vs_predicho": 0.6694386092880038,
+    "distritos_20k_hab_n": 64,
+    "spearman_observado_vs_predicho_20k_hab": 0.5063244771906495
+  },
   "semilla": 42
 }
