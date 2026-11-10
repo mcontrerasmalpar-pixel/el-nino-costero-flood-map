@@ -289,7 +289,7 @@ Proyecto de **Maky ([@mcontrerasmalpar-pixel](https://github.com/mcontrerasmalpa
 - Define los requisitos de cada iteracion, toma las decisiones de diseno y de datos (p. ej. tope de escala por capa, umbral de poblacion pequena, que sea un mapa de contexto y no un aviso oficial) y valida el resultado con la pagina real: tiles NASA, comunicado ENFEN contra el PDF oficial y pruebas en el navegador.
 - Revisa y mergea todos los PR.
 
-**Aporte de Claude** (8 commits, 3 PR; identificables con `git log --grep "Co-Authored-By: Claude"`):
+**Aporte de Claude** (13 commits; identificables con `git log --grep "Co-Authored-By: Claude"`):
 - Escala de tasas en rampa fria perceptualmente pareja y estilo propio para "sin datos"; escala propia por capa.
 - Franja superior con el estado ENFEN fechado y la fecha del proximo comunicado (`enfen_status.json`).
 - Leyendas oficiales de NASA GIBS para TSM e IMERG, visibles solo con la capa activa.
@@ -298,18 +298,19 @@ Proyecto de **Maky ([@mcontrerasmalpar-pixel](https://github.com/mcontrerasmalpa
 - Capa de riesgo predicho (ML), a partir del diseno pedido por Maky (target, features, modelo y salidas): `train_flood_risk.py` (features desde NASA POWER, Copernicus DEM y CENEPRED; XGBoost; validacion por provincias, baselines y ablacion), su integracion en el visor y la seccion de metodologia con sus limitaciones.
 - Este README (arquitectura, fuentes, modelo de datos y mantenimiento).
 
-**Cuanto del codigo actual viene de cada una** (medido con `git blame` sobre el codigo y la documentacion, sin contar los GeoJSON/JSON de datos; estado al 2026-11-03):
+**Cuanto del codigo actual viene de cada una** (medido con `git blame` sobre el codigo y la documentacion, sin contar los GeoJSON/JSON/CSV de datos; estado al 2026-11-10):
 
 | Archivo | Lineas | De commits de Claude |
 | --- | --- | --- |
-| `data/index.html` (visor) | 357 | 163 (46%) |
-| `README.md` | 201 | 168 (84%) |
+| `data/index.html` (visor) | 410 | 219 (53%) |
+| `README.md` | 324 | 291 (90%) |
+| `train_flood_risk.py` (modelo de riesgo predicho) | 455 | 455 (100%) |
 | `data/enfen_status.json` | 8 | 8 (100%) |
-| Pipeline Python (`fetch_data.py`, `process_data.py`, `build_population_from_inei.py`, `add_population_rates.py`, `fetch_population.py`) | 464 | 0 (0%) |
-| Otros (`index.html`, `.gitignore`) | 17 | 0 (0%) |
-| **Total** | **1,047** | **339 (32%)** |
+| Pipeline Python de Maky (`fetch_data.py`, `process_data.py`, `build_population_from_inei.py`, `add_population_rates.py`, `fetch_population.py`) | 464 | 0 (0%) |
+| Otros (`index.html`, `.gitignore`, `requirements-ml.txt`) | 27 | 10 (37%) |
+| **Total** | **1,688** | **983 (58%)** |
 
-Como leer la cifra: cuenta solo las lineas que sobreviven hoy y no mide la direccion, las decisiones, la verificacion ni los datos (la recoleccion, el pipeline y los archivos de datos son anteriores y de Maky). Cambiara a medida que el codigo evolucione.
+Como leer la cifra: cuenta solo las lineas que sobreviven hoy y no mide la direccion, las decisiones, la verificacion ni los datos (la recoleccion, el pipeline y los archivos de datos son anteriores y de Maky). El total subio de 32% (2026-11-03) a 58% porque se agrego codigo nuevo (el script de ML y mas documentacion), no porque se reemplazara codigo de Maky: el pipeline de datos sigue en 0%. Cambiara a medida que el codigo evolucione.
 
 ## Fuentes (resumen)
 
