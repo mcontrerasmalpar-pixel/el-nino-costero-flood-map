@@ -1,6 +1,6 @@
 # Mapa de riesgo de inundacion - El Nino Costero 2026-2027 (Peru)
 
-Mapa interactivo (Leaflet) que combina el historial de emergencias por lluvias e inundaciones en Peru, los puntos criticos validados por CENEPRED y condiciones en vivo de NASA GIBS. Es una sola pagina estatica (`data/index.html`), sin backend.
+Mapa interactivo (Leaflet) que combina el historial de emergencias por lluvias e inundaciones en Peru, los puntos criticos validados por CENEPRED, condiciones en vivo de NASA GIBS y una capa experimental de riesgo predicho por un modelo de ML (linea base historica, no un pronostico). Es una sola pagina estatica (`data/index.html`), sin backend: el entrenamiento del modelo ocurre fuera del visor y el visor solo lee sus resultados.
 
 **Este mapa no es un aviso oficial.** Avisos oficiales: [SENAMHI](https://www.senamhi.gob.pe/) · [INDECI](https://www.gob.pe/indeci). El historial es contexto (2003-2021), no un reporte en vivo del evento 2026-2027.
 
@@ -14,9 +14,11 @@ Mapa interactivo (Leaflet) que combina el historial de emergencias por lluvias e
 6. [Visualizacion y decisiones de diseno](#visualizacion-y-decisiones-de-diseno)
 7. [Accesibilidad](#accesibilidad)
 8. [Ejecucion local](#ejecucion-local)
-9. [Mantenimiento](#mantenimiento)
-10. [Limitaciones y metodologia](#limitaciones-y-metodologia)
-11. [Modelo de riesgo predicho (ML)](#modelo-de-riesgo-predicho-ml)
+9. [Despliegue](#despliegue)
+10. [Mantenimiento](#mantenimiento)
+11. [Limitaciones y metodologia](#limitaciones-y-metodologia)
+12. [Pendientes conocidos](#pendientes-conocidos)
+13. [Modelo de riesgo predicho (ML)](#modelo-de-riesgo-predicho-ml)
 
 ## Arquitectura
 
@@ -199,6 +201,10 @@ Luego abrir http://localhost:8000/index.html
 
 El mapa base es Esri World Dark Gray (gratuito, sin clave). No se requiere ninguna API key. Se necesita red hacia `unpkg.com`, `server.arcgisonline.com` y `gibs.earthdata.nasa.gov`.
 
+## Despliegue
+
+Sitio estatico desplegado en Vercel; cada pull request genera una preview. El `index.html` de la raiz solo redirige a `data/index.html` (se uso asi para GitHub Pages). No hay paso de build: el visor carga Leaflet desde un CDN y los GeoJSON desde `data/`.
+
 ## Mantenimiento
 
 - **Estado ENFEN:** ENFEN publica un comunicado cada ~2 semanas. Actualizar `data/enfen_status.json` (`estado`, `comunicado`, `fecha`, `url`) con cada uno; preferir el enlace directo al comunicado en vez del indice. La pagina muestra la fecha prevista del siguiente comunicado (`proximo`) y marca el dato como desactualizado un dia despues de esa fecha (a los 21 dias si falta el campo). Comunicado vigente cargado: N° 19-2026, 30/10/2026, verificado contra el PDF oficial; proximo: 13/11/2026.
@@ -214,6 +220,14 @@ El mapa base es Esri World Dark Gray (gratuito, sin clave). No se requiere ningu
 - Un solo punto por distrito (centroide de sus eventos): los mapas de calor muestran concentracion por distrito, no la ubicacion exacta de cada evento.
 - La zona El Nino Costero es un filtro geografico (cuatro departamentos del norte), no un filtro por anos con El Nino.
 - El filtro de fenomenos incluye huaycos, deslizamientos y derrumbes ademas de inundaciones; la capa es de "lluvias e inundaciones" en sentido amplio.
+
+## Pendientes conocidos
+
+- **Paneles que se pisan:** con ventanas de ~600 a 800 px de ancho y los paneles de capas y de leyenda abiertos a la vez, la leyenda tapa el enlace "Metodologia y advertencias". Visto en la preview de Vercel; el movil (hasta 600 px) ya arranca con los paneles plegados.
+- **IMERG domina el mapa:** encendida por defecto y con opacidad 0.7, su paleta de NASA (verde, amarillo, rojo) cubre el continente, compite con la escala azul de tasas y puede leerse como alerta. Se evalua apagarla por defecto y bajar su opacidad. La paleta es de NASA y no se puede cambiar.
+- **Daltonismo con tiles reales:** sin verificar la superposicion de TSM e IMERG con los circulos de tasa (ver Accesibilidad).
+- **Atribucion de Copernicus DEM:** confirmar el texto contra su licencia.
+- **Estado ENFEN:** actualizar `data/enfen_status.json` cuando salga el siguiente comunicado (previsto para el 13/11/2026).
 
 ## Modelo de riesgo predicho (ML)
 
